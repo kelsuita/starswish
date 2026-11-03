@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <!-- Blur is created only on Android 13+; older devices retain opaque bars. -->
+    <uses-sdk tools:overrideLibrary="top.yukonga.miuix.kmp.blur" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <queries><package android:name="com.cxincx.xxjz" /></queries>
+    <application
+        android:allowBackup="false"
+        android:label="星愿攒钱"
+        android:icon="@drawable/ic_launcher"
+        android:roundIcon="@drawable/ic_launcher"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
+        android:supportsRtl="true"
+        android:enableOnBackInvokedCallback="true"
+        android:theme="@style/Theme.StarSavings">
+        <activity android:name="com.starsavings.app.MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <service android:name="com.starsavings.app.sync.XiaoxingAccessibilityService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true"
+            android:label="星愿攒钱 · 读取小星账户">
+            <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility_service" />
+        </service>
+    </application>
+</manifest>
