@@ -504,6 +504,14 @@ private fun SavingsApp(
                         Text("星愿攒钱", fontWeight = FontWeight.Bold, fontSize = 24.sp)
                         Text("$versionName  /  Made by Kelsuita & GPT6", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                     }
+                    Card(Modifier.fillMaxWidth()) {
+                        ArrowPreference(title = "Github链接", summary = "查看项目，更新应用，看看Kelsuita在偷懒吗。", onClick = {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/kelsuita/starswish")))
+                        })
+                        ArrowPreference(title = "捐助我", summary = "请Kelsuita吃包辣条", onClick = {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://afdian.com/a/kelsuita")))
+                        })
+                    }
                     Panel {
                         Text("使用步骤", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         HelpStep("01", "添加账户", "名称须与小星记账的账户名称完全一致；不需要银行卡号、密码。")
