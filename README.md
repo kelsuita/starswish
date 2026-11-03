@@ -4,6 +4,8 @@
 
 一个用 Kotlin + Jetpack Compose 写的 Android 攒钱目标应用。界面基于 **MIUIX 0.9.4**，参考了 HyperOS 的设置页与大标题交互：整页横向切换、上滑折叠标题、跟随强调色推导的完整色板，以及可选的背景模糊。
 
+[下载安装](https://github.com/kelsuita/starswish/releases/latest) · [反馈问题](https://github.com/kelsuita/starswish/issues) · [爱发电捐助](https://afdian.com/a/kelsuita)
+
 ## 简介
 
 星愿攒钱不碰你的钱，只做一件事：把「想攒多少、还差多少、每天大概要存多少」算清楚，摆在每天都会看到的地方。
@@ -14,20 +16,30 @@
 
 ## 下载
 
-最新版本：[星愿攒钱 1.0.0](https://github.com/kelsuita/starswish/releases/tag/v1.0.0)
+当前发布版本：[星愿攒钱 1.0.0](https://github.com/kelsuita/starswish/releases/tag/v1.0.0)
 
-- `app-release.apk`：推荐日常使用
-- `app-debug.apk`：调试包，便于查看日志
+- `app-release.apk`：推荐日常使用，使用 Kelsuita 项目专用正式签名
+- `app-debug.apk`：调试包，使用 Android 调试签名
 - 系统要求：Android 8.0（API 26）及以上
-- 两个包签名一致，可互相覆盖安装，不会清空数据；升级时无需卸载
+- 两个 APK 的签名不同，无法互相覆盖安装
+- 正式签名与 1.0.0 初次发布时使用的调试签名不同。之前安装了旧版的用户通常需要先卸载旧版；卸载会删除应用数据，请先妥善保留重要信息
 
-> 1.0.0 的 release 包复用了本机调试密钥签名，仅适合侧载安装。若要上架应用商店，需要替换为自己的正式签名。
+后续 release 更新将继续使用同一正式密钥签名，可直接升级正式签名的版本。请勿丢失或更换该密钥，否则 Android 将无法把新版本作为旧版本的更新安装。
+
+## 快速开始
+
+1. 下载并安装 `app-release.apk`。
+2. 在「账户」添加账户并填写余额；不使用小星记账时，也可以完全手动维护。
+3. 在「首页」创建心愿，填写目标金额、关联账户并选择进度计算方式。
+4. 更新账户余额后查看目标进度。主题、强调色和首页横幅可在「设置 → 主题设置」调整。
+
+小星记账余额读取为可选功能，需要单独启用无障碍服务；首次使用请阅读下方的接入说明。
 
 ## 功能
 
 ### 攒钱目标
 
-- 目标名称、目标金额、截止日期；首页横幅、进度条与图标统一跟随应用强调色
+- 设置目标名称、目标金额与可选截止日期；首页横幅、进度条与图标跟随应用强调色
 - 每个目标可绑定一个或多个储蓄账户，展示进度百分比、已攒金额、剩余金额与每日建议金额
 - 两种进度算法：按账户**当前余额**计算，或从创建目标时的余额**起点**计算新增积累
 - 进度限制在 0%–100%，多目标余额不会相加，也不会互相占用
@@ -40,7 +52,7 @@
 
 ### 主题与外观
 
-「设置 → 主题设置」集中管理：
+外观选项包括：
 
 - 主题模式：跟随系统 / 浅色 / 深色
 - 深色模式纯黑背景：仅深色模式生效，页面底色转为纯黑，卡片保留层次
@@ -49,20 +61,20 @@
 - 首页横幅：浅色 / 深色；可指定横幅展示哪个目标；紧凑目标列表
 - 背景模糊：Android 13 及以上可用，作用于大标题栏与底部导航
 
-设置保存在本机，重启后依然生效。
+背景模糊开关位于「设置 → 外观」，其余上述选项集中在主题设置页。设置保存在本机，重启后依然生效。
 
 ### 交互与细节
 
 - 首页、账户、设置三页整页横向切换，标题与内容一起跟手移动，底部导航固定；各页保留独立滚动位置
 - 顶部大标题随滚动折叠，列表滚动到边界时有回弹效果
-- 「关于」是独立页面，包含应用信息、使用步骤、数据与权限说明、进度计算方式和官方接口文档
+- 「关于」是独立页面，包含项目 GitHub、爱发电捐助入口、使用步骤、数据与权限说明、进度计算方式和官方接口文档
 - 设置页顶部的一言来自公开接口：首次启动获取一次并保存在本地，切页或重启都不会刷新，只有点击才会重新获取
 
 ## 隐私与数据
 
 - 所有目标与账户数据仅保存在本机私有存储，无账号、无登录、无广告、无统计 SDK
 - 不读取银行卡号、密码或完整账单，不执行点击、转账或修改小星记账数据
-- 仅有的联网请求是首次启动获取一言，不会向该接口发送账户、余额或目标信息
+- 应用内的一言请求在首次启动和手动点击刷新时发出，不会向该接口发送账户、余额或目标信息；打开 GitHub、捐助或官方文档链接时会跳转外部应用，由对应站点处理访问
 - 小星余额读取依赖 Android 无障碍服务，只识别限定的应用包名与账户详情页，可随时在系统设置中关闭
 - 备份与设备迁移已关闭；卸载应用会删除本地数据
 
@@ -73,7 +85,7 @@
 - URL Scheme：<https://cxincx.com/support/scheme.html>
 - 加密备份说明：<https://cxincx.com/support/backup/7.html>
 
-官方公开的 Scheme 提供插入账单与唤起自动记账弹窗，**没有公开查询银行卡或余额的接口**；备份文件也不能直接打开读取。因此，本项目没有虚构余额 API，没有解析加密数据库，也没有把账单流水累计值当成真实余额。
+根据项目接入时核对的文档，Scheme 提供插入账单与唤起自动记账弹窗，未提供本项目可用的账户余额查询接口，备份文件也不能直接打开读取。因此，当前实现通过可见页面识别余额，不解析加密数据库，也不使用账单流水累计值代替余额。
 
 当前使用 Android 无障碍服务读取用户主动打开的 **小星记账可见账户详情页**：
 
@@ -89,7 +101,7 @@
 
 已依据用户提供的 Activity 名称与账户详情截图适配顶部人民币余额，并添加包含流水历史余额、金额分离节点的解析测试。尚未取得真实设备的无障碍节点联调结果；部分页面可能不暴露可访问文字或使用不同标签。**截图和解析测试不能替代真实小星版本的读取验证。**
 
-页面读取仅限定小星包名 `com.cxincx.xxjz`；不执行点击、修改账单、转账，不保存截图和完整页面文字。打开设置页时会向 `v1.hitokoto.cn` 请求一言，不向该接口发送账户、余额或目标。应用有 INTERNET 权限，备份与设备迁移关闭。可随时从系统设置关闭服务。卸载会删除应用数据。
+页面读取仅限定小星包名 `com.cxincx.xxjz`；不执行点击、修改账单、转账，不保存截图和完整页面文字。应用首次启动及手动刷新一言时向 `v1.hitokoto.cn` 发起请求，不向该接口发送账户、余额或目标。应用有 INTERNET 权限，备份与设备迁移关闭。可随时从系统设置关闭服务。卸载会删除应用数据。
 
 Android 13 及以上从文件安装应用时，系统可能先限制开启无障碍权限；如出现此情况，可在本应用的系统「应用信息」菜单中按系统提示允许受限设置，再手动开启。权限必须由设备用户确认。
 
@@ -97,7 +109,7 @@ Android 13 及以上从文件安装应用时，系统可能先限制开启无障
 
 要求 JDK 21、Android SDK Platform 37、可用网络或已有依赖缓存。Gradle Wrapper 已包含。最低支持 Android 8.0（API 26），targetSdk 36。
 
-Windows：
+Windows（运行单元测试、构建 debug APK 并执行静态检查）：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\build.ps1
@@ -105,26 +117,51 @@ powershell -ExecutionPolicy Bypass -File tools\build.ps1
 
 或者在 Android Studio 打开本目录，同步 Gradle 后运行。Android Studio 可自动创建本机 `local.properties`；该文件不应提交到版本控制。
 
-命令行：
+也可以直接运行 Gradle 任务：
 
 ```powershell
 ./gradlew.bat testDebugUnitTest assembleDebug lintDebug
 ```
 
-生成的本地测试安装包：`app/build/outputs/apk/debug/app-debug.apk`。
+生成的 debug 安装包：`app/build/outputs/apk/debug/app-debug.apk`。
 
 ```powershell
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-release 构建复用本机 `~/.android/debug.keystore`，因此 `assembleRelease` 产出的 `app-release.apk` 可直接安装，并与调试包共用签名。该配置只适合侧载与自用分发，不能用于应用商店上架。
+### 正式签名与 release 构建
+
+发布的 release APK 使用项目专用正式密钥签名，不会回退到 Android 调试签名。私钥和包含密码的本机配置不包含在仓库中。维护者在新环境构建正式版本时，需要从安全备份恢复密钥，并在项目根目录创建 `keystore.properties`，文件格式如下：
+
+```properties
+storeFile=C:/secure/path/starswish-release.keystore
+storePassword=YOUR_STORE_PASSWORD
+keyAlias=starswish
+keyPassword=YOUR_KEY_PASSWORD
+```
+
+`keystore.properties` 已由 `.gitignore` 排除，密钥文件也不应提交或上传到公开仓库。配置好后运行：
+
+```powershell
+./gradlew.bat assembleRelease
+```
+
+已签名 APK 输出到 `app/build/outputs/apk/release/app-release.apk`。没有本机签名配置时，构建会输出未签名 APK，不能直接作为安装包发布。自行构建分发时可使用自己的密钥，但无法覆盖安装本项目正式发布的 APK。
+
+发布前可使用 Android SDK Build Tools 中的 `apksigner` 检查签名：
+
+```powershell
+apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
+```
+
+请将 Build Tools 目录加入 `PATH`，或使用该工具的完整路径。维护项目正式版本时，应确认签名证书与既有正式版本一致，并为密钥与密码保留独立的安全备份。
 
 ## 验证
 
 - `SavingsLogicTest`：金额精度与输入边界、绑定账户计算、从起点计算、负数/超额进度、余额标签、不同账户、歧义结果、信用额度及外币拒绝。
 - `lintDebug`：静态检查。保留固定依赖版本；版本升级建议和 KTX 风格建议不影响构建。
 - 顶部胶囊已在隔离模拟器通过辅助无障碍服务加载实际构建中的提示组件，验证显示、自动消失、服务关闭时移除，以及点击返回已运行的星愿；确认页冷启动入口也已验证。该组件测试没有触发真实小星的读取事件，不代表实际账户余额读取已联调通过。
-- `tools/smoke-test.ps1`：安装当前构建，在专用模拟器验证添加账户、目标必填校验、50% 进度、进程重启后持久化、权限披露、关于页按钮与系统返回、边缘返回手势、主题下拉弹窗和深色模式。
+- `tools/smoke-test.ps1`：安装当前构建，在专用隔离模拟器验证添加账户、目标必填校验、进度计算、重启持久化、权限披露、关于页与系统返回、边缘返回手势及主题设置。该脚本会清除指定测试模拟器中本应用的数据，不要对日常设备运行。
 - `tools/start-test-emulator.ps1`：使用本地已有 Android 35 x86_64 镜像启动隔离测试模拟器，端口 5580。不会操作连接的真实手机。测试脚本只会清空指定隔离模拟器中本应用的数据。
 
 ## 已知限制
@@ -132,6 +169,7 @@ release 构建复用本机 `~/.android/debug.keystore`，因此 `assembleRelease
 - 小星记账余额读取尚未在真实设备上完成无障碍节点联调，不同版本的页面结构可能导致识别失败
 - 状态栏模糊在部分系统上表现异常，暂未处理
 - 仅支持人民币储蓄账户；不提供多币种、自动划款或资金分配
+- 正式 APK 目前为项目侧载分发；尚未配置应用商店发布流程
 
 ## 项目结构
 
@@ -141,7 +179,7 @@ app/src/main/java/com/kelsuita/starswish/
   data/Models.kt                       金额、账户、目标与进度计算
   data/SavingsStore.kt                  原子本地持久化、候选余额与确认
   data/Appearance.kt                    本地外观设置模型
-  data/Hitokoto.kt                      一言获取与本地缓存
+  data/Hitokoto.kt                      一言网络请求（缓存由 SavingsStore 管理）
   sync/BalanceParser.kt                保守的页面余额解析
   sync/XiaoxingAccessibilityService.kt  限时、限定包名的可见页面读取
   sync/BalanceReadCapsule.kt            读取成功后的无障碍悬浮提示
@@ -153,4 +191,6 @@ tools/                                 构建与隔离模拟器验证脚本
 
 ## 许可证
 
-尚未添加开源许可证文件。在添加之前，源代码默认保留所有权利；如需引用或分发，请先联系作者。
+本项目采用 [MIT 许可证](LICENSE)，允许使用、修改和分发，包括商业用途；分发时需保留版权声明和许可证全文。软件按原样提供，不作任何担保。
+
+第三方依赖仍遵循各自的许可证。
