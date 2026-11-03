@@ -305,7 +305,7 @@ private fun SavingsApp(
           bottomBar = {
             if (page < 3) Box(Modifier.fillMaxWidth()
                 .then(if (backdrop != null) Modifier.textureBlur(backdrop, RectangleShape, 25f,
-                    colors = BlurDefaults.blurColors(blendColors = listOf(BlendColorEntry(MiuixTheme.colorScheme.surface.copy(alpha = .8f))))) else Modifier)
+                    colors = BlurDefaults.blurColors(blendColors = listOf(BlendColorEntry(pageBackground.copy(alpha = .8f))))) else Modifier)
                 .background(barColor)) {
                 NavigationBar(color = barColor) {
                 listOf("首页" to NavIcons[0], "账户" to NavIcons[1], "设置" to NavIcons[2]).forEachIndexed { index, item ->
@@ -323,7 +323,7 @@ private fun SavingsApp(
         Scaffold(topBar = {
             Box(Modifier.fillMaxWidth()
                 .then(if (backdrop != null) Modifier.textureBlur(backdrop, RectangleShape, 25f,
-                    colors = BlurDefaults.blurColors(blendColors = listOf(BlendColorEntry(MiuixTheme.colorScheme.surface.copy(alpha = .8f))))) else Modifier)
+                    colors = BlurDefaults.blurColors(blendColors = listOf(BlendColorEntry(pageBackground.copy(alpha = .8f))))) else Modifier)
                 .background(if (backdrop != null) Color.Transparent else pageBackground)) {
                 TopAppBar(title = when (displayedPage) { 0 -> "星愿"; 1 -> "账户"; 2 -> "设置"; 4 -> "主题设置"; else -> "关于" },
                 subtitle = "",
