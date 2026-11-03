@@ -22,6 +22,13 @@ class BackupDataTest {
         assertEquals(empty, BackupData.fromJson(empty.toJson()))
     }
 
+    @Test fun caseDistinctAccountNamesCanBeBackedUp() {
+        val original = backup().copy(accounts = listOf(
+            BankAccount("account", "Savings", 100, 1),
+            BankAccount("other", "savings", 200, 1)))
+        assertEquals(original, BackupData.fromJson(original.toJson()))
+    }
+
     @Test fun invalidBackupsAreRejected() {
         val original = backup()
         listOf(

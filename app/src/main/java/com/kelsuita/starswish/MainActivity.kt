@@ -22,6 +22,7 @@ import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -345,14 +346,21 @@ private fun SavingsApp(
       entry<AppRoute> { route ->
         val page = if (route.page >= 3) route.page else selectedTab
         val blurActive = appearance.blurEnabled && android.os.Build.VERSION.SDK_INT >= 33 && isRuntimeShaderSupported()
-        val backdrop = if (blurActive) rememberLayerBackdrop {
-            drawRect(pageBackground)
-            drawContent()
-        } else null
+        // A LayerBackdrop has one recording owner. Pager neighbours must not overwrite it.
+        val backdrops = List(if (route.page < 3) 3 else 1) {
+            if (blurActive) rememberLayerBackdrop {
+                drawRect(pageBackground)
+                drawContent()
+            } else null
+        }
+        val backdrop = backdrops[if (route.page < 3) selectedTab else 0]
         val barColor = if (blurActive) Color.Transparent else pageBackground
         Scaffold(
           bottomBar = {
-            if (page < 3) Box(Modifier.fillMaxWidth()
+            // Reattach the blur consumer once the pager has placed its final source.
+            // Updating only the backdrop can retain the consumer's cached sampling state.
+            if (page < 3) key(backdrop, pagerState.settledPage) {
+            Box(Modifier.fillMaxWidth()
                 .then(if (backdrop != null) Modifier.textureBlur(backdrop, RectangleShape, 25f,
                     colors = BlurDefaults.blurColors(blendColors = listOf(BlendColorEntry(pageBackground.copy(alpha = .8f))))) else Modifier)
                 .background(barColor)) {
@@ -364,9 +372,13 @@ private fun SavingsApp(
                 }
                 }
             }
+            }
           }, containerColor = pageBackground,
+          // Each page's TopAppBar owns the status-bar inset. Do not offset the pager.
+          contentWindowInsets = WindowInsets(0, 0, 0, 0),
         ) { padding ->
             val pageContent: @Composable (Int) -> Unit = { displayedPage ->
+        val backdrop = backdrops[if (route.page < 3) displayedPage else 0]
         val contentScrollBehavior = MiuixScrollBehavior()
         val pageScrollState = key(displayedPage) { rememberScrollState() }
         Scaffold(topBar = {
@@ -384,14 +396,15 @@ private fun SavingsApp(
                 })
             }
         }, containerColor = pageBackground) { pagePadding ->
+        Box(Modifier.fillMaxSize()
+            .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)) {
         Column(Modifier.fillMaxSize()
-            .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
             .background(pageBackground)
             .overScrollVertical()
             .nestedScroll(contentScrollBehavior.nestedScrollConnection)
             .verticalScroll(pageScrollState)
             .padding(start = 16.dp, end = 16.dp, top = pagePadding.calculateTopPadding(),
-                bottom = padding.calculateBottomPadding()),
+                bottom = maxOf(padding.calculateBottomPadding(), pagePadding.calculateBottomPadding())),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Spacer(Modifier.height(2.dp))
             when (displayedPage) {
@@ -604,14 +617,14 @@ private fun SavingsApp(
         }
         }
         }
+        }
         Box(Modifier.fillMaxSize()
             .then(if (route.page < 3 && selectedTab != 0) Modifier.graphicsLayer {
                 translationX = size.width * 0.06f * backProgress
                 scaleX = 1f - 0.04f * backProgress
                 scaleY = 1f - 0.04f * backProgress
             } else Modifier)) {
-        Box(Modifier.fillMaxSize()
-            .padding(top = padding.calculateTopPadding()).consumeWindowInsets(padding)) {
+        Box(Modifier.fillMaxSize()) {
                 if (route.page >= 3) pageContent(route.page)
                 else HorizontalPager(
                     state = pagerState,
@@ -774,7 +787,8 @@ private fun SavingsApp(
             val checked = account.id in selected
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
                 .background(if (checked) MiuixTheme.colorScheme.primaryContainer else MiuixTheme.colorScheme.secondaryContainer)
-                .clickable { selected = if (checked) selected - account.id else selected + account.id }.padding(14.dp),
+                .toggleable(value = checked, role = Role.Checkbox,
+                    onValueChange = { selected = if (it) selected + account.id else selected - account.id }).padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(if (checked) "●" else "○", color = MiuixTheme.colorScheme.primary, fontSize = 20.sp)
                 Column(Modifier.weight(1f)) {

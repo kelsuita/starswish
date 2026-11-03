@@ -16,7 +16,7 @@
 
 ## 下载
 
-当前发布版本：[星愿攒钱 1.1.0](https://github.com/kelsuita/starswish/releases/tag/v1.1.0)
+当前发布版本：[星愿攒钱 1.1.5](https://github.com/kelsuita/starswish/releases/tag/v1.1.5)
 
 - `app-release.apk`：推荐日常使用，使用 Kelsuita 项目专用正式签名
 - `app-debug.apk`：调试包，使用 Android 调试签名
@@ -175,7 +175,7 @@ apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
 ## 已知限制
 
 - 小星记账余额读取尚未在真实设备上完成无障碍节点联调，不同版本的页面结构可能导致识别失败
-- 状态栏模糊在部分系统上表现异常，暂未处理
+- 已修复状态栏背景采集范围及切换标签后底栏模糊失效的问题；已在 Android 35 模拟器使用宿主 GPU 验证，其他厂商系统和 GPU 的表现仍需设备验证。详见 [Miuix 审查记录](docs/miuix-review.md)
 - 仅支持人民币储蓄账户；不提供多币种、自动划款或资金分配
 - 正式 APK 目前为项目侧载分发；尚未配置应用商店发布流程
 

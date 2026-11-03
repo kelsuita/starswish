@@ -19,7 +19,7 @@ data class BackupData(
         require(format == "starswish-backup" && version == 1) { "不是支持的星愿备份文件或备份版本" }
         require(exportedAt >= 0 && accounts.size <= 50 && goals.size <= 100) { "备份数据超出限制" }
         require(accounts.map { it.id }.distinct().size == accounts.size &&
-            accounts.map { it.name.lowercase() }.distinct().size == accounts.size &&
+            accounts.map { it.name }.distinct().size == accounts.size &&
             goals.map { it.id }.distinct().size == goals.size) { "备份包含重复的账户或目标" }
         accounts.forEach {
             require(it.id.isNotBlank() && it.id.length <= 128 && it.name.isNotBlank() && it.name.length <= 40 &&
