@@ -18,8 +18,8 @@ android {
         applicationId = "com.kelsuita.starswish"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true }
@@ -49,6 +49,7 @@ android {
 }
 
 dependencies {
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.compose.foundation:foundation:1.12.1")
     implementation("androidx.compose.ui:ui:1.12.1")

@@ -7,6 +7,8 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.NavigationEventTransitionState
@@ -64,6 +66,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.serialization.Serializable
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.utils.PagerNavigationSpringSpec
 import top.yukonga.miuix.kmp.utils.PagerGestureNestedScrollConnection
@@ -268,6 +273,50 @@ private fun SavingsApp(
     fun notify(text: String) = Toast.makeText(context, text, Toast.LENGTH_LONG).show()
     fun mutate(block: () -> Unit): Boolean = runCatching { block(); refresh(); true }
         .getOrElse { notify(it.message ?: "操作失败，请重试"); false }
+    var pendingBackup by remember { mutableStateOf<BackupData?>(null) }
+    var backupBusy by remember { mutableStateOf(false) }
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) scope.launch {
+            backupBusy = true
+            try {
+                val text = store.exportBackup().toJson()
+                withContext(Dispatchers.IO) {
+                    checkNotNull(context.contentResolver.openOutputStream(uri, "wt")) { "无法写入所选文件" }
+                        .bufferedWriter(Charsets.UTF_8).use { it.write(text) }
+                }
+                notify("备份已导出")
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                notify("导出失败：${error.message ?: "无法写入文件"}")
+            } finally { backupBusy = false }
+        }
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            backupBusy = true
+            try {
+                pendingBackup = withContext(Dispatchers.IO) {
+                    val bytes = checkNotNull(context.contentResolver.openInputStream(uri)) { "无法读取所选文件" }
+                        .use { input ->
+                            val output = java.io.ByteArrayOutputStream()
+                            val buffer = ByteArray(8192)
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                require(output.size() + count <= BackupData.MAX_BYTES) { "备份文件不能超过 1 MB" }
+                                output.write(buffer, 0, count)
+                            }
+                            output.toByteArray()
+                        }
+                    require(bytes.size <= BackupData.MAX_BYTES) { "备份文件不能超过 1 MB" }
+                    BackupData.fromJson(bytes.toString(Charsets.UTF_8))
+                }
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                notify("导入失败：${error.message ?: "无法读取文件"}")
+            } finally { backupBusy = false }
+        }
+    }
     fun capture(account: BankAccount) {
         if (!readerEnabled()) { disclosure = true; return }
         if (mutate { store.startCapture(account.id) }) {
@@ -325,7 +374,7 @@ private fun SavingsApp(
                 .then(if (backdrop != null) Modifier.textureBlur(backdrop, RectangleShape, 25f,
                     colors = BlurDefaults.blurColors(blendColors = listOf(BlendColorEntry(pageBackground.copy(alpha = .8f))))) else Modifier)
                 .background(if (backdrop != null) Color.Transparent else pageBackground)) {
-                TopAppBar(title = when (displayedPage) { 0 -> "星愿"; 1 -> "账户"; 2 -> "设置"; 4 -> "主题设置"; else -> "关于" },
+                TopAppBar(title = when (displayedPage) { 0 -> "星愿"; 1 -> "账户"; 2 -> "设置"; 4 -> "主题设置"; 5 -> "导入与导出"; else -> "关于" },
                 subtitle = "",
                 color = barColor, scrollBehavior = contentScrollBehavior,
                 navigationIcon = {
@@ -454,6 +503,11 @@ private fun SavingsApp(
                             checked = appearance.blurEnabled,
                             onCheckedChange = { value -> mutate { store.saveAppearance(appearance.copy(blurEnabled = value)) } })
                     }
+                    SmallTitle(text = "备份", textColor = accent,
+                        insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
+                    Card(Modifier.fillMaxWidth()) {
+                        ArrowPreference(title = "导入与导出", summary = "通过 JSON 文件备份或恢复数据", onClick = { navigate(5) })
+                    }
                     SmallTitle(text = "应用", textColor = accent,
                         insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
                     Card(Modifier.fillMaxWidth()) {
@@ -497,6 +551,18 @@ private fun SavingsApp(
                             checked = appearance.compactList,
                             onCheckedChange = { value -> mutate { store.saveAppearance(appearance.copy(compactList = value)) } })
                     }
+                }
+                5 -> {
+                    Card(Modifier.fillMaxWidth()) {
+                        ArrowPreference(title = "导出备份", summary = "将账户、目标、外观设置和一言保存为 JSON 文件",
+                            enabled = !backupBusy, onClick = {
+                                exportLauncher.launch("starswish-backup-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(Date())}.json")
+                            })
+                        ArrowPreference(title = "导入备份", summary = "选择 JSON 备份，确认后替换现有数据",
+                            enabled = !backupBusy, onClick = { importLauncher.launch(arrayOf("application/json", "text/*", "application/octet-stream")) })
+                    }
+                    Note(if (backupBusy) "正在处理备份，请稍候…" else "备份文件为明文 JSON，包含账户名称与余额，请妥善保存。导入会替换现有账户、目标和外观设置，建议先导出当前数据。")
+                    Note("备份不包含读取中的临时请求及待确认余额。无障碍服务权限由系统管理，换设备后需要重新开启。")
                 }
                 3 -> {
                     Panel {
@@ -561,6 +627,25 @@ private fun SavingsApp(
         }
       }
     }
+    pendingBackup?.let { backup -> AppDialog("导入备份？", { if (!backupBusy) pendingBackup = null }) {
+        Note("备份包含 ${backup.accounts.size} 个账户、${backup.goals.size} 个目标，以及外观设置和一言。确认后将替换当前数据，无法撤销；建议先导出当前数据。")
+        Button(onClick = {
+            scope.launch {
+                backupBusy = true
+                try {
+                    withContext(Dispatchers.IO) { store.importBackup(backup) }
+                    hitokoto = backup.hitokoto
+                    pendingBackup = null
+                    refresh()
+                    notify("备份已导入")
+                } catch (error: Exception) {
+                    if (error is CancellationException) throw error
+                    notify("导入失败：${error.message ?: "保存失败"}")
+                } finally { backupBusy = false }
+            }
+        }, enabled = !backupBusy, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColorsPrimary()) { Text("确认替换并导入") }
+        Button(onClick = { pendingBackup = null }, enabled = !backupBusy, modifier = Modifier.fillMaxWidth()) { Text("取消") }
+    } }
     if (goalEditor) GoalEditor(editingGoal, accounts, onDismiss = { goalEditor = false }, onSave = {
         if (mutate { store.saveGoal(it) }) goalEditor = false
     }, onAddAccount = { goalEditor = false; navigate(1); editingAccount = null; accountEditor = true })

@@ -36,6 +36,32 @@ class SavingsStore(context: Context) {
             .putBoolean("pure_black_background", value.pureBlackBackground).commit()) { "外观设置保存失败" }
     }
 
+    @Synchronized fun exportBackup(): BackupData {
+        val goals = goals()
+        val appearance = appearance().let { value ->
+            if (goals.any { it.id == value.featuredGoalId }) value else value.copy(featuredGoalId = "")
+        }
+        return BackupData(exportedAt = System.currentTimeMillis(), accounts = accounts(), goals = goals,
+            appearance = appearance, hitokoto = hitokoto()).validate()
+    }
+
+    @Synchronized fun importBackup(backup: BackupData) {
+        backup.validate()
+        val value = backup.appearance
+        // Commit the complete replacement once, only after every field has passed validation.
+        val editor = prefs.edit()
+            .putString("accounts", accountsJson(backup.accounts).toString())
+            .putString("goals", JSONArray().apply { backup.goals.forEach { put(goalJson(it)) } }.toString())
+            .putInt("theme_mode", value.themeMode).putInt("accent_choice", value.accentIndex)
+            .putInt("banner_style", value.bannerStyle).putString("featured_goal", value.featuredGoalId)
+            .putBoolean("compact_list", value.compactList).putInt("palette_style", value.paletteStyle)
+            .putInt("color_spec", value.colorSpec).putBoolean("blur_enabled", value.blurEnabled)
+            .putBoolean("pure_black_background", value.pureBlackBackground)
+            .remove("capture").remove("candidate")
+        if (backup.hitokoto == null) editor.remove("hitokoto") else editor.putString("hitokoto", backup.hitokoto)
+        check(editor.commit()) { "备份导入保存失败，请检查可用空间" }
+    }
+
     @Synchronized fun accounts(): List<BankAccount> = readArray("accounts").let { array ->
         (0 until array.length()).map { i -> array.getJSONObject(i).let {
             BankAccount(it.getString("id"), it.getString("name"), it.getLong("balance"),

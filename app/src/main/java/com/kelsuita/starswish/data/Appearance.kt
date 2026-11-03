@@ -1,6 +1,9 @@
 package com.starsavings.app.data
 
+import kotlinx.serialization.Serializable
+
 /** Theme 0 follows system; banner 0 is light, 1 is dark. */
+@Serializable
 data class Appearance(
     val themeMode: Int = 0,
     val accentIndex: Int = 2,

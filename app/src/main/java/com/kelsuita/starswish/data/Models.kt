@@ -4,6 +4,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.text.NumberFormat
 import java.util.Locale
+import kotlinx.serialization.Serializable
 
 object Money {
     const val MAX_CENTS = 99_999_999_999_999L
@@ -22,6 +23,7 @@ object Money {
     }.format(BigDecimal.valueOf(cents, 2))
 }
 
+@Serializable
 data class BankAccount(
     val id: String,
     val name: String,
@@ -30,8 +32,10 @@ data class BankAccount(
     val source: String = "手动录入",
 )
 
+@Serializable
 enum class GoalMode { BALANCE, GROWTH }
 
+@Serializable
 data class SavingGoal(
     val id: String,
     val title: String,
