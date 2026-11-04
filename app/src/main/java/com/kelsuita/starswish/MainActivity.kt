@@ -368,25 +368,28 @@ private fun SavingsApp(
                 drawContent()
             } else null
         }
-        val backdrop = backdrops[if (route.page < 3) selectedTab else 0]
+        // The bottom bar samples the pager's stable parent, not an individual page.
+        // A page's layer can be detached during tab animation or a rapid second tap.
+        val bottomBackdrop = if (blurActive && route.page < 3) rememberLayerBackdrop {
+            drawRect(pageBackground)
+            drawContent()
+        } else null
         val barColor = if (blurActive) Color.Transparent else pageBackground
         Scaffold(
           bottomBar = {
-            // Reattach the blur consumer once the pager has placed its final source.
-            // Updating only the backdrop can retain the consumer's cached sampling state.
-            if (page < 3) key(backdrop, pagerState.settledPage) {
-            Box(Modifier.fillMaxWidth()
-                .then(if (backdrop != null) Modifier.textureBlur(backdrop, RectangleShape, 25f,
-                    colors = BlurDefaults.blurColors(blendColors = listOf(BlendColorEntry(pageBackground.copy(alpha = .8f))))) else Modifier)
-                .background(barColor)) {
-                NavigationBar(color = barColor) {
-                listOf("首页" to NavIcons[0], "账户" to NavIcons[1], "设置" to NavIcons[2]).forEachIndexed { index, item ->
-                    NavigationBarItem(selected = page == index, onClick = { navigate(index) },
-                        icon = item.second, label = item.first, modifier = Modifier.weight(1f),
-                        colors = NavigationBarDefaults.navigationBarItemColors(selectedContentColor = accent))
+            if (page < 3) {
+                Box(Modifier.fillMaxWidth()
+                    .then(if (bottomBackdrop != null) Modifier.textureBlur(bottomBackdrop, RectangleShape, 25f,
+                        colors = BlurDefaults.blurColors(blendColors = listOf(BlendColorEntry(pageBackground.copy(alpha = .8f))))) else Modifier)
+                    .background(barColor)) {
+                    NavigationBar(color = barColor) {
+                        listOf("首页" to NavIcons[0], "账户" to NavIcons[1], "设置" to NavIcons[2]).forEachIndexed { index, item ->
+                            NavigationBarItem(selected = page == index, onClick = { navigate(index) },
+                                icon = item.second, label = item.first, modifier = Modifier.weight(1f),
+                                colors = NavigationBarDefaults.navigationBarItemColors(selectedContentColor = accent))
+                        }
+                    }
                 }
-                }
-            }
             }
           }, containerColor = pageBackground,
           // Each page's TopAppBar owns the status-bar inset. Do not offset the pager.
@@ -711,7 +714,8 @@ private fun SavingsApp(
                 scaleX = 1f - 0.04f * backProgress
                 scaleY = 1f - 0.04f * backProgress
             } else Modifier)) {
-        Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize()
+            .then(if (bottomBackdrop != null) Modifier.layerBackdrop(bottomBackdrop) else Modifier)) {
                 if (route.page >= 3) pageContent(route.page)
                 else HorizontalPager(
                     state = pagerState,
