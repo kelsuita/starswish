@@ -18,9 +18,17 @@ android {
         applicationId = "com.kelsuita.starswish"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.1.5"
+        versionCode = 4
+        versionName = "1.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            isUniversalApk = true
+        }
     }
     buildFeatures { compose = true }
     compileOptions {

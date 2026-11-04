@@ -6,7 +6,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class Appearance(
     val themeMode: Int = 0,
-    val accentIndex: Int = 2,
+    val accentIndex: Int = 0,
     val bannerStyle: Int = 0,
     val featuredGoalId: String = "",
     val compactList: Boolean = false,

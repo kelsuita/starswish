@@ -23,7 +23,7 @@ data class BackupData(
             goals.map { it.id }.distinct().size == goals.size) { "备份包含重复的账户或目标" }
         accounts.forEach {
             require(it.id.isNotBlank() && it.id.length <= 128 && it.name.isNotBlank() && it.name.length <= 40 &&
-                it.balance in -Money.MAX_CENTS..Money.MAX_CENTS && it.updatedAt >= 0 && it.source.length <= 200) {
+                it.balance in -Money.MAX_CENTS..Money.MAX_CENTS && it.updatedAt >= 0 && it.createdAt >= 0 && it.source.length <= 200) {
                 "备份中的账户数据无效"
             }
         }
@@ -34,7 +34,7 @@ data class BackupData(
                 it.accountIds.size <= accounts.size &&
                 it.accountIds.all { id -> id in accountIds } &&
                 it.baseline in -(50 * Money.MAX_CENTS)..(50 * Money.MAX_CENTS) &&
-                it.colorIndex >= 0 && (it.deadline.isEmpty() ||
+                it.colorIndex >= 0 && it.createdAt >= 0 && (it.deadline.isEmpty() ||
                 (it.deadline.length == 10 && runCatching { LocalDate.parse(it.deadline) }.isSuccess))) {
                 "备份中的目标或关联账户无效"
             }

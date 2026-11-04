@@ -29,6 +29,25 @@ class BackupDataTest {
         assertEquals(original, BackupData.fromJson(original.toJson()))
     }
 
+    @Test fun legacyBackupWithoutCreationDatesStillImports() {
+        val old = backup().toJson().replace(Regex(""",\s*"createdAt"\s*:\s*0"""), "")
+        assertFalse(old.contains("createdAt"))
+        val decoded = BackupData.fromJson(old)
+        assertEquals(0L, decoded.accounts.single().createdAt)
+        assertEquals(0L, decoded.goals.single().createdAt)
+    }
+
+    @Test fun creationDatesSurviveExportAndImport() {
+        val original = backup().copy(
+            accounts = backup().accounts.map { it.copy(createdAt = 123L) },
+            goals = backup().goals.map { it.copy(createdAt = 456L) },
+        )
+        assertEquals(original, BackupData.fromJson(original.toJson()))
+        assertThrows(IllegalArgumentException::class.java) {
+            original.copy(goals = original.goals.map { it.copy(createdAt = -1L) }).toJson()
+        }
+    }
+
     @Test fun invalidBackupsAreRejected() {
         val original = backup()
         listOf(

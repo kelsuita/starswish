@@ -16,10 +16,14 @@
 
 ## 下载
 
-当前发布版本：[星愿攒钱 1.1.5](https://github.com/kelsuita/starswish/releases/tag/v1.1.5)
+当前发布版本：[星愿攒钱 1.3.0](https://github.com/kelsuita/starswish/releases/tag/v1.3.0)
 
-- `app-release.apk`：推荐日常使用，使用 Kelsuita 项目专用正式签名
-- `app-debug.apk`：调试包，使用 Android 调试签名
+- `app-universal-release.apk`：通用架构包，不确定设备架构时选择此包
+- `app-armeabi-v7a-release.apk`：32 位 ARM 设备
+- `app-arm64-v8a-release.apk`：64 位 ARM 设备
+- `app-x86-release.apk`：32 位 x86 设备
+- `app-x86_64-release.apk`：64 位 x86 设备
+- 所有上述 Release 包均使用同一项目正式签名；调试包使用 Android 调试签名
 - 系统要求：Android 8.0（API 26）及以上
 - 两个 APK 的签名不同，无法互相覆盖安装
 - 正式签名与 1.0.0 初次发布时使用的调试签名不同。之前安装了旧版的用户通常需要先卸载旧版；卸载会删除应用数据，请先妥善保留重要信息
@@ -28,7 +32,7 @@
 
 ## 快速开始
 
-1. 下载并安装 `app-release.apk`。
+1. 下载并安装与你设备架构匹配的 Release APK，不确定时选择 `app-universal-release.apk`。
 2. 在「账户」添加账户并填写余额；不使用小星记账时，也可以完全手动维护。
 3. 在「首页」创建心愿，填写目标金额、关联账户并选择进度计算方式。
 4. 更新账户余额后查看目标进度。主题、强调色和首页横幅可在「设置 → 主题设置」调整。
@@ -154,12 +158,12 @@ keyPassword=YOUR_KEY_PASSWORD
 ./gradlew.bat assembleRelease
 ```
 
-已签名 APK 输出到 `app/build/outputs/apk/release/app-release.apk`。没有本机签名配置时，构建会输出未签名 APK，不能直接作为安装包发布。自行构建分发时可使用自己的密钥，但无法覆盖安装本项目正式发布的 APK。
+已签名 APK 输出到 `app/build/outputs/apk/release/app-universal-release.apk`。没有本机签名配置时，构建会输出未签名 APK，不能直接作为安装包发布。自行构建分发时可使用自己的密钥，但无法覆盖安装本项目正式发布的 APK。
 
 发布前可使用 Android SDK Build Tools 中的 `apksigner` 检查签名：
 
 ```powershell
-apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
+apksigner verify --print-certs app/build/outputs/apk/release/app-universal-release.apk
 ```
 
 请将 Build Tools 目录加入 `PATH`，或使用该工具的完整路径。维护项目正式版本时，应确认签名证书与既有正式版本一致，并为密钥与密码保留独立的安全备份。

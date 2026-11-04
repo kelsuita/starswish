@@ -30,6 +30,7 @@ data class BankAccount(
     val balance: Long,
     val updatedAt: Long,
     val source: String = "手动录入",
+    val createdAt: Long = 0L,
 )
 
 @Serializable
@@ -45,6 +46,7 @@ data class SavingGoal(
     val baseline: Long = 0L,
     val deadline: String = "",
     val colorIndex: Int = 0,
+    val createdAt: Long = 0L,
 ) {
     fun saved(accounts: List<BankAccount>): Long =
         (accounts.filter { it.id in accountIds }.sumOf { it.balance } -

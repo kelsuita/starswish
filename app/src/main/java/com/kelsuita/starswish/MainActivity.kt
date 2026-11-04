@@ -24,14 +24,18 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -41,6 +45,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
@@ -52,6 +57,12 @@ import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.blur.textureBlur
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -61,6 +72,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -71,6 +84,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import top.yukonga.miuix.kmp.utils.PagerNavigationSpringSpec
 import top.yukonga.miuix.kmp.utils.PagerGestureNestedScrollConnection
 import top.yukonga.miuix.kmp.utils.pagerGestureOverride
@@ -82,6 +96,7 @@ import top.yukonga.miuix.kmp.nav.core.rememberNavBackStack
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
+import top.yukonga.miuix.kmp.menu.OverlayIconDropdownMenu
 import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
@@ -381,22 +396,84 @@ private fun SavingsApp(
         val backdrop = backdrops[if (route.page < 3) displayedPage else 0]
         val contentScrollBehavior = MiuixScrollBehavior()
         val pageScrollState = key(displayedPage) { rememberScrollState() }
+        var viewportTop by remember { mutableFloatStateOf(0f) }
+        var viewportHeight by remember { mutableFloatStateOf(0f) }
         Scaffold(topBar = {
             Box(Modifier.fillMaxWidth()
                 .then(if (backdrop != null) Modifier.textureBlur(backdrop, RectangleShape, 25f,
                     colors = BlurDefaults.blurColors(blendColors = listOf(BlendColorEntry(pageBackground.copy(alpha = .8f))))) else Modifier)
                 .background(if (backdrop != null) Color.Transparent else pageBackground)) {
-                TopAppBar(title = when (displayedPage) { 0 -> "星愿"; 1 -> "账户"; 2 -> "设置"; 4 -> "主题设置"; 5 -> "导入与导出"; else -> "关于" },
+                TopAppBar(title = when (displayedPage) { 0 -> "星愿"; 1 -> "账户"; 2 -> "设置"; 4 -> "主题设置"; 5 -> "导入与导出"; 6 -> "目标排序"; 7 -> "账户排序"; else -> "关于" },
                 subtitle = "",
                 color = barColor, scrollBehavior = contentScrollBehavior,
+                bottomContent = {
+                    if (displayedPage == 1 || displayedPage == 2) {
+                        // Unlike TopAppBar.subtitle, this caption does not reappear below the small title.
+                        Box(Modifier.layout { measurable, constraints ->
+                            val placeable = measurable.measure(constraints)
+                            val visibleHeight = (placeable.height *
+                                (1f - contentScrollBehavior.state.collapsedFraction).coerceIn(0f, 1f)).toInt()
+                            layout(placeable.width, visibleHeight) { placeable.placeRelative(0, 0) }
+                        }.clipToBounds()) {
+                            Text(if (displayedPage == 1) "绑定小星记账中的人民币储蓄账户。"
+                                else if (quoteLoading && quoteRetry == 0) "一言加载中…" else hitokoto ?: "一言加载中…",
+                                modifier = Modifier.fillMaxWidth()
+                                    .then(if (displayedPage == 2) Modifier.clickable(enabled = !quoteLoading) { quoteRetry++ } else Modifier)
+                                    .padding(start = TopAppBarDefaults.TitlePadding, end = TopAppBarDefaults.TitlePadding, bottom = 8.dp),
+                                fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                        }
+                    }
+                },
+                actions = {
+                    if (displayedPage == 6 || displayedPage == 7) {
+                        val sortingGoals = displayedPage == 6
+                        var sortCriterion by rememberSaveable(displayedPage) { mutableIntStateOf(-1) }
+                        var descending by rememberSaveable(displayedPage) { mutableStateOf(false) }
+                        fun applySort(criterion: Int, isDescending: Boolean) {
+                            if (sortingGoals) {
+                                val sorted = when (criterion) {
+                                    0 -> goals.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
+                                    1 -> goals.sortedBy { it.createdAt }
+                                    else -> goals.sortedBy { it.target }
+                                }
+                                mutate { store.reorderGoals((if (isDescending) sorted.reversed() else sorted).map { it.id }) }
+                            } else {
+                                val sorted = when (criterion) {
+                                    0 -> accounts.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+                                    1 -> accounts.sortedBy { it.createdAt }
+                                    else -> accounts.sortedBy { it.balance }
+                                }
+                                mutate { store.reorderAccounts((if (isDescending) sorted.reversed() else sorted).map { it.id }) }
+                            }
+                        }
+                        OverlayIconDropdownMenu(entries = listOf(
+                            DropdownEntry(listOf(
+                                DropdownItem("按名称排序", onClick = { sortCriterion = 0; applySort(0, descending) }),
+                                DropdownItem("按时间排序", onClick = { sortCriterion = 1; applySort(1, descending) }),
+                                DropdownItem(if (sortingGoals) "价格排序" else "余额排序",
+                                    onClick = { sortCriterion = 2; applySort(2, descending) }),
+                            )),
+                            DropdownEntry(listOf(DropdownItem("倒序", selected = descending, onClick = {
+                                if (sortCriterion >= 0) applySort(sortCriterion, !descending)
+                                else if (sortingGoals) mutate { store.reorderGoals(goals.map { it.id }.reversed()) }
+                                else mutate { store.reorderAccounts(accounts.map { it.id }.reversed()) }
+                                descending = !descending
+                            }))),
+                        ), collapseOnSelection = false) { MoreDots("排序菜单") }
+                    }
+                },
                 navigationIcon = {
                     if (displayedPage >= 3) IconButton(onClick = { backStack.removeLastOrNull() }) {
-                        Icon(MiuixIcons.Back, contentDescription = "返回设置")
+                        Icon(MiuixIcons.Back, contentDescription = if (displayedPage == 6) "返回目标列表"
+                            else if (displayedPage == 7) "返回账户列表" else "返回设置")
                     }
                 })
             }
         }, containerColor = pageBackground) { pagePadding ->
-        Box(Modifier.fillMaxSize()
+        Box(Modifier.fillMaxSize().onGloballyPositioned {
+            viewportTop = it.positionInWindow().y
+            viewportHeight = it.size.height.toFloat()
+        }
             .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)) {
         Column(Modifier.fillMaxSize()
             .background(pageBackground)
@@ -413,9 +490,10 @@ private fun SavingsApp(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically) {
                         Text("目标列表", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        Button(onClick = { editingGoal = null; goalEditor = true },
-                            colors = ButtonDefaults.buttonColorsPrimary(), minHeight = 40.dp,
-                            insideMargin = PaddingValues(horizontal = 16.dp, vertical = 9.dp)) { Text("＋ 新建目标", fontSize = 13.sp) }
+                        OverlayIconDropdownMenu(entry = DropdownEntry(listOf(
+                            DropdownItem("新建目标", onClick = { editingGoal = null; goalEditor = true }),
+                            DropdownItem("排序", onClick = { navigate(6) }),
+                        ))) { MoreDots("目标菜单") }
                     }
                     if (goals.isEmpty()) {
                         EmptyCard("star", "第一个心愿，从这里开始", "旅行、应急金、心仪的礼物……\n给目标起个名字，让积累看得见。", "创建我的目标") {
@@ -431,7 +509,6 @@ private fun SavingsApp(
                     Note("目标之间独立计算；同一账户可关联多个目标，不代表资金已分开存放。")
                 }
                 1 -> {
-                    Note("绑定小星记账中的人民币储蓄账户。")
                     if (candidate != null) {
                         val account = accounts.firstOrNull { it.id == candidate.accountId }
                         Panel {
@@ -471,10 +548,10 @@ private fun SavingsApp(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically) {
                         Text("我的账户", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        Button(onClick = { editingAccount = null; accountEditor = true },
-                            colors = ButtonDefaults.buttonColorsPrimary(), insideMargin = PaddingValues(16.dp, 9.dp)) {
-                            Text("＋ 添加账户", fontSize = 13.sp)
-                        }
+                        OverlayIconDropdownMenu(entry = DropdownEntry(listOf(
+                            DropdownItem("添加账户", onClick = { editingAccount = null; accountEditor = true }),
+                            DropdownItem("排序", onClick = { navigate(7) }),
+                        ))) { MoreDots("账户菜单") }
                     }
                     if (accounts.isEmpty()) EmptyCard("bank", "先连接一份积累", "添加与小星记账完全相同的账户名称，\n就能为攒钱目标提供余额。", "添加第一个账户") {
                         editingAccount = null; accountEditor = true
@@ -502,11 +579,21 @@ private fun SavingsApp(
                     }
                     Note("仅支持人民币。余额来自记账数据或手动填写，与银行实际余额可能有差异。")
                 }
+                6 -> {
+                    goals.forEach { goal -> key(goal.id) {
+                        SortCard(goal.title, Money.format(goal.target), goal.id, goals.map { it.id }, pageScrollState, viewportTop, viewportHeight) { ids ->
+                            mutate { store.reorderGoals(ids) }
+                        }
+                    } }
+                }
+                7 -> {
+                    accounts.forEach { account -> key(account.id) {
+                        SortCard(account.name, Money.format(account.balance), account.id, accounts.map { it.id }, pageScrollState, viewportTop, viewportHeight) { ids ->
+                            mutate { store.reorderAccounts(ids) }
+                        }
+                    } }
+                }
                 2 -> {
-                    Text(if (quoteLoading && quoteRetry == 0) "一言加载中…" else hitokoto ?: "一言加载中…",
-                        modifier = Modifier.fillMaxWidth().clickable(enabled = !quoteLoading) { quoteRetry++ }
-                            .padding(start = 16.dp, top = 4.dp, bottom = 4.dp),
-                        fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                     SmallTitle(text = "外观", textColor = accent,
                         insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
                     Card(Modifier.fillMaxWidth()) {
@@ -687,6 +774,7 @@ private fun SavingsApp(
 
 @Composable private fun Overview(goals: List<SavingGoal>, accounts: List<BankAccount>, appearance: Appearance, accent: Color) {
     val featured = goals.firstOrNull { it.id == appearance.featuredGoalId } ?: goals.firstOrNull()
+    val completed = featured != null && featured.saved(accounts) >= featured.target
     val progress by animateFloatAsState(featured?.progress(accounts) ?: 0f, tween(650), label = "featured-progress")
     val status = appearance.bannerStyle == 0
     val foreground = if (status) MiuixTheme.colorScheme.onPrimaryContainer else MiuixTheme.colorScheme.onPrimary
@@ -694,9 +782,10 @@ private fun SavingsApp(
     val base = if (status) MiuixTheme.colorScheme.primaryContainer else accent
     val fill = if (status) MiuixTheme.colorScheme.onPrimaryContainer else MiuixTheme.colorScheme.onPrimary
     Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(base)
-        .semantics { contentDescription = "首页横幅 ${featured?.title ?: "尚无目标"} ${(progress * 100).toInt()}%" }) {
+        .semantics { contentDescription = "首页横幅 ${featured?.title ?: "尚无目标"} ${if (completed) "苦尽甘来" else "${(progress * 100).toInt()}%"}" }) {
         Box(Modifier.align(Alignment.TopEnd).offset(x = 28.dp, y = (-18).dp).size(134.dp), contentAlignment = Alignment.Center) {
-            Symbol("star", foreground.copy(alpha = .12f), Modifier.size(120.dp))
+            if (completed) Text("🎉", fontSize = 86.sp, modifier = Modifier.graphicsLayer { alpha = .28f })
+            else Symbol("star", foreground.copy(alpha = .12f), Modifier.size(120.dp))
         }
         Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("攒钱进度 · ${goals.size} 个目标", fontSize = 12.sp, color = subtle)
@@ -706,7 +795,8 @@ private fun SavingsApp(
                 Text(if (featured == null) "先添加账户，再设定目标" else
                     "¥ ${Money.format(featured.saved(accounts))} / ¥ ${Money.format(featured.target)}",
                     fontSize = 13.sp, color = subtle, modifier = Modifier.weight(1f))
-                Text("${(progress * 100).toInt()}%", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = foreground)
+                Text(if (completed) "苦尽甘来" else "${(progress * 100).toInt()}%",
+                    fontSize = 24.sp, fontWeight = FontWeight.Bold, color = foreground)
             }
             LinearProgressIndicator(progress = progress, height = 9.dp,
                 colors = ProgressIndicatorDefaults.progressIndicatorColors(
@@ -860,6 +950,118 @@ private fun SavingsApp(
         Column(Modifier.heightIn(max = 620.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             content()
+        }
+    }
+}
+
+@Composable private fun MoreDots(description: String) {
+    val color = MiuixTheme.colorScheme.onSurfaceContainer
+    Canvas(Modifier.size(24.dp).semantics { contentDescription = description }) {
+        val radius = 1.7.dp.toPx()
+        listOf(.25f, .5f, .75f).forEach { fraction ->
+            drawCircle(color, radius, Offset(size.width / 2f, size.height * fraction))
+        }
+    }
+}
+
+@Composable private fun SortCard(
+    title: String, amount: String, id: String, ids: List<String>, scrollState: ScrollState, viewportTop: Float,
+    viewportHeight: Float, onReorder: (List<String>) -> Boolean,
+) {
+    val color = MiuixTheme.colorScheme.onSurfaceVariantActions
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    var rowHeight by remember { mutableFloatStateOf(64f) }
+    var displacement by remember { mutableFloatStateOf(0f) }
+    var dragging by remember { mutableStateOf(false) }
+    var handleTop by remember { mutableFloatStateOf(0f) }
+    var pointerY by remember { mutableFloatStateOf(0f) }
+    val index = ids.indexOf(id)
+    // Animate the logical slot independently of scrolling so edge scrolling stays direct.
+    val animatedIndex by animateFloatAsState(index.toFloat(),
+        animationSpec = if (dragging) snap() else tween(220), label = "sortSlot")
+    val animatedDisplacement by animateFloatAsState(displacement,
+        animationSpec = if (dragging) snap() else tween(220), label = "sortDrop")
+    val lift by animateFloatAsState(if (dragging) 1f else 0f,
+        animationSpec = tween(160), label = "sortLift")
+    fun move(step: Int): Boolean {
+        val from = ids.indexOf(id)
+        val to = from + step
+        if (from !in ids.indices || to !in ids.indices) return false
+        return onReorder(ids.toMutableList().apply { add(to, removeAt(from)) })
+    }
+    val currentMove by rememberUpdatedState<(Int) -> Boolean> { step -> move(step) }
+    val edge = with(density) { 64.dp.toPx() }
+    val direction = if (dragging && viewportHeight > 0f) when {
+        pointerY < viewportTop + edge -> -1
+        pointerY > viewportTop + viewportHeight - edge -> 1
+        else -> 0
+    } else 0
+    LaunchedEffect(direction, scrollState) {
+        while (direction != 0) {
+            val scrolled = scrollState.scrollBy(direction * with(density) { 10.dp.toPx() })
+            if (scrolled == 0f) break
+            displacement += scrolled
+            val stride = rowHeight + with(density) { 12.dp.toPx() }
+            if (kotlin.math.abs(displacement) >= stride / 2f) {
+                if (currentMove(direction)) displacement -= direction * stride
+                else displacement = 0f
+            }
+            delay(16)
+        }
+    }
+    Card(Modifier.fillMaxWidth().zIndex(if (dragging || animatedDisplacement != 0f) 1f else 0f)
+        .onSizeChanged { rowHeight = it.height.toFloat() }
+        .graphicsLayer {
+            val stride = rowHeight + with(density) { 12.dp.toPx() }
+            translationY = if (dragging) displacement
+                else animatedDisplacement + (animatedIndex - index) * stride
+            scaleX = 1f + .015f * lift
+            scaleY = 1f + .015f * lift
+            shadowElevation = with(density) { 8.dp.toPx() } * lift
+        }) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = 16.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Text(title, modifier = Modifier.weight(1f), maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                style = MiuixTheme.textStyles.body1)
+            Spacer(Modifier.width(8.dp))
+            Text("¥ $amount", modifier = Modifier.widthIn(max = 132.dp), fontSize = 13.sp, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            Box(Modifier.size(48.dp).onGloballyPositioned { handleTop = it.positionInWindow().y }
+                .semantics {
+                    contentDescription = "拖动排序 $title"
+                    customActions = listOf(
+                        CustomAccessibilityAction("上移") { move(-1) },
+                        CustomAccessibilityAction("下移") { move(1) },
+                    )
+                }
+                .pointerInput(id) {
+                    detectDragGestures(
+                        onDragStart = { displacement = 0f; pointerY = handleTop + it.y; dragging = true },
+                        onDragEnd = { displacement = 0f; dragging = false },
+                        onDragCancel = { displacement = 0f; dragging = false },
+                    ) { change, dragAmount ->
+                        change.consume()
+                        pointerY = handleTop + change.position.y
+                        displacement += dragAmount.y
+                        val stride = rowHeight + with(density) { 12.dp.toPx() }
+                        if (kotlin.math.abs(displacement) >= stride / 2f) {
+                            val step = if (displacement > 0f) 1 else -1
+                            if (currentMove(step)) displacement -= step * stride
+                            else displacement = 0f
+                        }
+                    }
+                }, contentAlignment = Alignment.Center) {
+                Canvas(Modifier.size(22.dp)) {
+                    val stroke = 1.8.dp.toPx()
+                    listOf(.28f, .5f, .72f).forEach { fraction ->
+                        val y = size.height * fraction
+                        drawLine(color, Offset(size.width * .17f, y), Offset(size.width * .83f, y), stroke,
+                            cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                    }
+                }
+            }
         }
     }
 }

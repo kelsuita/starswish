@@ -13,7 +13,8 @@ class SavingsStore(context: Context) {
 
     fun appearance(): Appearance = Appearance(
         prefs.getInt("theme_mode", 0).coerceIn(0, 2),
-        prefs.getInt("accent_choice", prefs.getInt("accent_index", 0) + 2).coerceIn(0, 5),
+        prefs.getInt("accent_choice", if (prefs.contains("accent_index"))
+            prefs.getInt("accent_index", 0) + 2 else 0).coerceIn(0, 5),
         prefs.getInt("banner_style", 0).coerceIn(0, 1),
         prefs.getString("featured_goal", "").orEmpty(),
         prefs.getBoolean("compact_list", false),
@@ -50,8 +51,12 @@ class SavingsStore(context: Context) {
         val value = backup.appearance
         // Commit the complete replacement once, only after every field has passed validation.
         val editor = prefs.edit()
-            .putString("accounts", accountsJson(backup.accounts).toString())
-            .putString("goals", JSONArray().apply { backup.goals.forEach { put(goalJson(it)) } }.toString())
+            .putString("accounts", accountsJson(backup.accounts.mapIndexed { i, account ->
+                if (account.createdAt == 0L) account.copy(createdAt = i.toLong() + 1) else account
+            }).toString())
+            .putString("goals", JSONArray().apply { backup.goals.forEachIndexed { i, goal ->
+                put(goalJson(if (goal.createdAt == 0L) goal.copy(createdAt = i.toLong() + 1) else goal))
+            } }.toString())
             .putInt("theme_mode", value.themeMode).putInt("accent_choice", value.accentIndex)
             .putInt("banner_style", value.bannerStyle).putString("featured_goal", value.featuredGoalId)
             .putBoolean("compact_list", value.compactList).putInt("palette_style", value.paletteStyle)
@@ -65,7 +70,7 @@ class SavingsStore(context: Context) {
     @Synchronized fun accounts(): List<BankAccount> = readArray("accounts").let { array ->
         (0 until array.length()).map { i -> array.getJSONObject(i).let {
             BankAccount(it.getString("id"), it.getString("name"), it.getLong("balance"),
-                it.getLong("updatedAt"), it.optString("source", "手动录入"))
+                it.getLong("updatedAt"), it.optString("source", "手动录入"), it.optLong("createdAt", i.toLong() + 1))
         } }
     }
     @Synchronized fun goals(): List<SavingGoal> = readArray("goals").let { array ->
@@ -74,7 +79,7 @@ class SavingsStore(context: Context) {
             SavingGoal(o.getString("id"), o.getString("title"), o.getLong("target"),
                 (0 until ids.length()).map { ids.getString(it) }.toSet(),
                 GoalMode.valueOf(o.optString("mode", "BALANCE")), o.optLong("baseline"),
-                o.optString("deadline"), o.optInt("colorIndex"))
+                o.optString("deadline"), o.optInt("colorIndex"), o.optLong("createdAt", i.toLong() + 1))
         } }
     }
     @Synchronized fun saveAccount(account: BankAccount) {
@@ -83,7 +88,8 @@ class SavingsStore(context: Context) {
         val existing = accounts()
         require(existing.none { it.id != account.id && it.name == account.name }) { "账户名称已存在" }
         require(existing.any { it.id == account.id } || existing.size < 50) { "最多添加 50 个账户" }
-        writeAccounts(existing.filterNot { it.id == account.id } + account)
+        writeAccounts(existing.map { if (it.id == account.id) account.copy(createdAt = it.createdAt) else it }
+            .let { if (existing.any { it.id == account.id }) it else it + account.copy(createdAt = System.currentTimeMillis()) })
     }
     @Synchronized fun saveGoal(goal: SavingGoal) {
         require(goal.title.isNotBlank() && goal.title.length <= 40)
@@ -92,8 +98,22 @@ class SavingsStore(context: Context) {
         val existing = goals()
         require(existing.any { it.id == goal.id } || existing.size < 100) { "最多添加 100 个目标" }
         put("goals", JSONArray().apply {
-            (existing.filterNot { it.id == goal.id } + goal).forEach { put(goalJson(it)) }
+            existing.map { if (it.id == goal.id) goal.copy(createdAt = it.createdAt) else it }
+                .let { if (existing.any { it.id == goal.id }) it else it + goal.copy(createdAt = System.currentTimeMillis()) }
+                .forEach { put(goalJson(it)) }
         }.toString())
+    }
+    @Synchronized fun reorderGoals(ids: List<String>) {
+        val current = goals()
+        require(ids.size == current.size && ids.toSet().size == ids.size && ids.toSet() == current.map { it.id }.toSet())
+        val byId = current.associateBy { it.id }
+        put("goals", JSONArray().apply { ids.forEach { put(goalJson(byId.getValue(it))) } }.toString())
+    }
+    @Synchronized fun reorderAccounts(ids: List<String>) {
+        val current = accounts()
+        require(ids.size == current.size && ids.toSet().size == ids.size && ids.toSet() == current.map { it.id }.toSet())
+        val byId = current.associateBy { it.id }
+        writeAccounts(ids.map { byId.getValue(it) })
     }
     @Synchronized fun deleteGoal(id: String) {
         put("goals", JSONArray().apply { goals().filterNot { it.id == id }.forEach { put(goalJson(it)) } }.toString())
@@ -136,10 +156,11 @@ class SavingsStore(context: Context) {
     private fun writeAccounts(accounts: List<BankAccount>) = put("accounts", accountsJson(accounts).toString())
     private fun accountsJson(accounts: List<BankAccount>) = JSONArray().apply {
         accounts.forEach { put(JSONObject().put("id", it.id).put("name", it.name)
-            .put("balance", it.balance).put("updatedAt", it.updatedAt).put("source", it.source)) }
+            .put("balance", it.balance).put("updatedAt", it.updatedAt).put("source", it.source)
+            .put("createdAt", it.createdAt)) }
     }
     private fun goalJson(goal: SavingGoal) = JSONObject().put("id", goal.id).put("title", goal.title)
         .put("target", goal.target).put("accountIds", JSONArray(goal.accountIds.toList()))
         .put("mode", goal.mode.name).put("baseline", goal.baseline).put("deadline", goal.deadline)
-        .put("colorIndex", goal.colorIndex)
+        .put("colorIndex", goal.colorIndex).put("createdAt", goal.createdAt)
 }
