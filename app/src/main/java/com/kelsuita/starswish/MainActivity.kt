@@ -1,15 +1,13 @@
-package com.starsavings.app
+package com.kelsuita.starswish
 
 import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.compose.BackHandler
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.NavigationEventTransitionState
 import androidx.navigationevent.compose.NavigationBackHandler
@@ -30,17 +28,16 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,14 +60,11 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.path
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
@@ -100,9 +94,16 @@ import top.yukonga.miuix.kmp.menu.OverlayIconDropdownMenu
 import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
-import com.starsavings.app.data.*
+import top.yukonga.miuix.kmp.icon.extended.BankCards
+import top.yukonga.miuix.kmp.icon.extended.Favorites
+import top.yukonga.miuix.kmp.icon.extended.Home
+import top.yukonga.miuix.kmp.icon.extended.Link
+import top.yukonga.miuix.kmp.icon.extended.More
+import top.yukonga.miuix.kmp.icon.extended.Settings
+import top.yukonga.miuix.kmp.squircle.squircleSurface
+import com.kelsuita.starswish.data.*
 import com.kelsuita.starswish.data.fetchHitokoto
-import com.starsavings.app.sync.XiaoxingAccessibilityService
+import com.kelsuita.starswish.sync.XiaoxingAccessibilityService
 import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -121,32 +122,13 @@ private val Blue = Color(0xFF3975F6)
 private val AccentColors = listOf(Blue, Color(0xFF2EAA8C), Color(0xFFB6573B), Color(0xFF8068C8))
 @Serializable
 private data class AppRoute(val page: Int) : NavKey
-private val NavIcons = listOf(
-    ImageVector.Builder("首页", 24.dp, 24.dp, 24f, 24f).apply {
-        path(fill = SolidColor(Color.Black)) {
-            moveTo(12f, 2f); lineTo(2f, 10f); lineTo(4f, 10f); lineTo(4f, 21f)
-            lineTo(10f, 21f); lineTo(10f, 14f); lineTo(14f, 14f); lineTo(14f, 21f)
-            lineTo(20f, 21f); lineTo(20f, 10f); lineTo(22f, 10f); close()
-        }
-    }.build(),
-    ImageVector.Builder("账户", 24.dp, 24.dp, 24f, 24f).apply {
-        path(fill = SolidColor(Color.Black)) {
-            moveTo(12f, 2f); lineTo(2f, 7f); lineTo(2f, 9f); lineTo(22f, 9f); lineTo(22f, 7f); close()
-            moveTo(4f, 11f); lineTo(7f, 11f); lineTo(7f, 18f); lineTo(4f, 18f); close()
-            moveTo(10.5f, 11f); lineTo(13.5f, 11f); lineTo(13.5f, 18f); lineTo(10.5f, 18f); close()
-            moveTo(17f, 11f); lineTo(20f, 11f); lineTo(20f, 18f); lineTo(17f, 18f); close()
-            moveTo(2f, 20f); lineTo(22f, 20f); lineTo(22f, 22f); lineTo(2f, 22f); close()
-        }
-    }.build(),
-    ImageVector.Builder("设置", 24.dp, 24.dp, 24f, 24f).apply {
-        path(stroke = SolidColor(Color.Black), strokeLineWidth = 2.4f,
-            strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round) {
-            moveTo(3f, 6f); lineTo(21f, 6f); moveTo(3f, 12f); lineTo(21f, 12f)
-            moveTo(3f, 18f); lineTo(21f, 18f)
-            moveTo(8f, 3f); lineTo(8f, 9f); moveTo(16f, 9f); lineTo(16f, 15f)
-            moveTo(10f, 15f); lineTo(10f, 21f)
-        }
-    }.build()
+private val NavIcons = listOf(MiuixIcons.Home, MiuixIcons.BankCards, MiuixIcons.Settings)
+// A full backup can approach the Bundle transaction limit. Persist the pending import across
+// recreation only when it is comfortably small; otherwise the user can pick the file again.
+private const val PENDING_BACKUP_SAVE_LIMIT = 256 * 1024
+private val PendingBackupSaver = Saver<String?, String>(
+    save = { json -> json?.takeIf { it.length <= PENDING_BACKUP_SAVE_LIMIT } },
+    restore = { it },
 )
 
 class MainActivity : ComponentActivity() {
@@ -215,7 +197,7 @@ class MainActivity : ComponentActivity() {
         } else false
     }
     companion object {
-        const val ACTION_CONFIRM_BALANCE = "com.starsavings.app.action.CONFIRM_BALANCE"
+        const val ACTION_CONFIRM_BALANCE = "com.kelsuita.starswish.action.CONFIRM_BALANCE"
     }
 }
 
@@ -239,15 +221,15 @@ private fun SavingsApp(
     var quoteRetry by remember { mutableIntStateOf(0) }
     LaunchedEffect(quoteRetry) {
         if (hitokoto == null || quoteRetry > 0) {
-            // Record the first attempt before networking; opening settings or restarting never retries it.
-            if (hitokoto == null) {
-                hitokoto = "一言暂时不可用，点击重试"
-                store.saveHitokoto(hitokoto!!)
-            }
             quoteLoading = true
-            fetchHitokoto()?.let { quote ->
-                store.saveHitokoto(quote)
-                hitokoto = quote
+            val fetched = fetchHitokoto()
+            if (fetched != null) {
+                store.saveHitokoto(fetched)
+                hitokoto = fetched
+            } else if (hitokoto == null) {
+                // Keep the failure in memory only: the next launch should retry instead of
+                // treating an error message as saved content (and exporting it in backups).
+                hitokoto = "一言暂时不可用，点击重试"
             }
             quoteLoading = false
         }
@@ -262,40 +244,79 @@ private fun SavingsApp(
             navigationJob = scope.launch { pagerState.springAnimateToPage(page) }
         }
     }
-    var editingGoal by remember { mutableStateOf<SavingGoal?>(null) }
-    var goalEditor by remember { mutableStateOf(false) }
-    var editingAccount by remember { mutableStateOf<BankAccount?>(null) }
-    var accountEditor by remember { mutableStateOf(false) }
-    var disclosure by remember { mutableStateOf(false) }
+    var editingGoalId by rememberSaveable { mutableStateOf<String?>(null) }
+    var goalEditor by rememberSaveable { mutableStateOf(false) }
+    var editingAccountId by rememberSaveable { mutableStateOf<String?>(null) }
+    var accountEditor by rememberSaveable { mutableStateOf(false) }
+    var disclosure by rememberSaveable { mutableStateOf(false) }
+    // Delete targets are intentionally not saved across recreation: the confirmation carries
+    // no user input, so restoring it is not worth serializing a whole model object. Visibility
+    // is separate from the target so the dialog keeps its content while it hides.
     var deletingGoal by remember { mutableStateOf<SavingGoal?>(null) }
     var deletingAccount by remember { mutableStateOf<BankAccount?>(null) }
+    var deletingGoalVisible by remember { mutableStateOf(false) }
+    var deletingAccountVisible by remember { mutableStateOf(false) }
+    // The pending import is kept as JSON so the confirmation survives recreation.
+    var pendingBackupJson by rememberSaveable(stateSaver = PendingBackupSaver) { mutableStateOf<String?>(null) }
+    var importVisible by rememberSaveable { mutableStateOf(false) }
+    val pendingBackup = remember(pendingBackupJson) {
+        pendingBackupJson?.let { runCatching { BackupData.fromJson(it) }.getOrNull() }
+    }
+    // A backup too large for saved state is intentionally dropped on recreation; close the
+    // confirmation instead of leaving an invisible dialog blocking back navigation.
+    LaunchedEffect(importVisible, pendingBackup) {
+        if (importVisible && pendingBackup == null) importVisible = false
+    }
+    val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(confirmBalanceRequested) {
         if (confirmBalanceRequested) {
             navigate(1)
             goalEditor = false
             accountEditor = false
             disclosure = false
-            deletingGoal = null
-            deletingAccount = null
+            deletingGoalVisible = false
+            deletingAccountVisible = false
+            importVisible = false
             refresh()
             onConfirmationOpened()
         }
     }
     val accounts = remember(revision) { store.accounts() }
     val goals = remember(revision) { store.goals() }
+    val editingGoal = goals.firstOrNull { it.id == editingGoalId }
+    val editingAccount = accounts.firstOrNull { it.id == editingAccountId }
     val candidate = remember(revision) { store.candidate() }
     val request = remember(revision) { store.request() }
     val enabled = remember(revision) { readerEnabled() }
-    fun notify(text: String) = Toast.makeText(context, text, Toast.LENGTH_LONG).show()
+    // Drop a pending read when its two-minute window closes; otherwise the "waiting to read"
+    // panel would stay on screen until the next unrelated recomposition.
+    LaunchedEffect(request?.expiresAt) {
+        val expiresAt = request?.expiresAt ?: return@LaunchedEffect
+        val remaining = expiresAt - System.currentTimeMillis()
+        if (remaining > 0) delay(remaining)
+        val stillExpired = store.request()?.let { it.expiresAt <= System.currentTimeMillis() } == true
+        if (stillExpired) {
+            runCatching { store.cancelCapture() }
+            refresh()
+        }
+    }
+    fun notify(text: String) {
+        scope.launch {
+            snackbarHostState.showSnackbar(
+                message = text,
+                withDismissAction = true,
+                duration = SnackbarDuration.Short,
+            )
+        }
+    }
     fun mutate(block: () -> Unit): Boolean = runCatching { block(); refresh(); true }
         .getOrElse { notify(it.message ?: "操作失败，请重试"); false }
-    var pendingBackup by remember { mutableStateOf<BackupData?>(null) }
     var backupBusy by remember { mutableStateOf(false) }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) scope.launch {
             backupBusy = true
             try {
-                val text = store.exportBackup().toJson()
+                val text = withContext(Dispatchers.IO) { store.exportBackup().toJson() }
                 withContext(Dispatchers.IO) {
                     checkNotNull(context.contentResolver.openOutputStream(uri, "wt")) { "无法写入所选文件" }
                         .bufferedWriter(Charsets.UTF_8).use { it.write(text) }
@@ -311,7 +332,7 @@ private fun SavingsApp(
         if (uri != null) scope.launch {
             backupBusy = true
             try {
-                pendingBackup = withContext(Dispatchers.IO) {
+                pendingBackupJson = withContext(Dispatchers.IO) {
                     val bytes = checkNotNull(context.contentResolver.openInputStream(uri)) { "无法读取所选文件" }
                         .use { input ->
                             val output = java.io.ByteArrayOutputStream()
@@ -325,8 +346,9 @@ private fun SavingsApp(
                             output.toByteArray()
                         }
                     require(bytes.size <= BackupData.MAX_BYTES) { "备份文件不能超过 1 MB" }
-                    BackupData.fromJson(bytes.toString(Charsets.UTF_8))
+                    BackupData.fromJson(bytes.toString(Charsets.UTF_8)).toJson()
                 }
+                importVisible = true
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 notify("导入失败：${error.message ?: "无法读取文件"}")
@@ -352,7 +374,8 @@ private fun SavingsApp(
     NavigationBackHandler(
         state = pagerBackState,
         isBackEnabled = backStack.size == 1 && selectedTab != 0 &&
-            !goalEditor && !accountEditor && !disclosure,
+            !goalEditor && !accountEditor && !disclosure &&
+            !deletingGoalVisible && !deletingAccountVisible && !importVisible,
         onBackCompleted = { navigate(0) },
     )
     val backProgress = (pagerBackState.transitionState as? NavigationEventTransitionState.InProgress)
@@ -379,19 +402,22 @@ private fun SavingsApp(
           bottomBar = {
             if (page < 3) {
                 Box(Modifier.fillMaxWidth()
-                    .then(if (bottomBackdrop != null) Modifier.textureBlur(bottomBackdrop, RectangleShape, 25f,
+                    .then(if (bottomBackdrop != null) Modifier.textureBlur(bottomBackdrop, RectangleShape, BlurDefaults.BlurRadius,
                         colors = BlurDefaults.blurColors(blendColors = listOf(BlendColorEntry(pageBackground.copy(alpha = .8f))))) else Modifier)
                     .background(barColor)) {
                     NavigationBar(color = barColor) {
                         listOf("首页" to NavIcons[0], "账户" to NavIcons[1], "设置" to NavIcons[2]).forEachIndexed { index, item ->
+                            // NavigationBarItem already applies weight(1f) inside its RowScope.
                             NavigationBarItem(selected = page == index, onClick = { navigate(index) },
-                                icon = item.second, label = item.first, modifier = Modifier.weight(1f),
+                                icon = item.second, label = item.first,
                                 colors = NavigationBarDefaults.navigationBarItemColors(selectedContentColor = accent))
                         }
                     }
                 }
             }
-          }, containerColor = pageBackground,
+          },
+          snackbarHost = { SnackbarHost(snackbarHostState) },
+          containerColor = pageBackground,
           // Each page's TopAppBar owns the status-bar inset. Do not offset the pager.
           contentWindowInsets = WindowInsets(0, 0, 0, 0),
         ) { padding ->
@@ -403,7 +429,7 @@ private fun SavingsApp(
         var viewportHeight by remember { mutableFloatStateOf(0f) }
         Scaffold(topBar = {
             Box(Modifier.fillMaxWidth()
-                .then(if (backdrop != null) Modifier.textureBlur(backdrop, RectangleShape, 25f,
+                .then(if (backdrop != null) Modifier.textureBlur(backdrop, RectangleShape, BlurDefaults.BlurRadius,
                     colors = BlurDefaults.blurColors(blendColors = listOf(BlendColorEntry(pageBackground.copy(alpha = .8f))))) else Modifier)
                 .background(if (backdrop != null) Color.Transparent else pageBackground)) {
                 TopAppBar(title = when (displayedPage) { 0 -> "星愿"; 1 -> "账户"; 2 -> "设置"; 4 -> "主题设置"; 5 -> "导入与导出"; 6 -> "目标排序"; 7 -> "账户排序"; else -> "关于" },
@@ -451,9 +477,9 @@ private fun SavingsApp(
                         }
                         OverlayIconDropdownMenu(entries = listOf(
                             DropdownEntry(listOf(
-                                DropdownItem("按名称排序", onClick = { sortCriterion = 0; applySort(0, descending) }),
-                                DropdownItem("按时间排序", onClick = { sortCriterion = 1; applySort(1, descending) }),
-                                DropdownItem(if (sortingGoals) "价格排序" else "余额排序",
+                                DropdownItem("按名称排序", selected = sortCriterion == 0, onClick = { sortCriterion = 0; applySort(0, descending) }),
+                                DropdownItem("按时间排序", selected = sortCriterion == 1, onClick = { sortCriterion = 1; applySort(1, descending) }),
+                                DropdownItem(if (sortingGoals) "价格排序" else "余额排序", selected = sortCriterion == 2,
                                     onClick = { sortCriterion = 2; applySort(2, descending) }),
                             )),
                             DropdownEntry(listOf(DropdownItem("倒序", selected = descending, onClick = {
@@ -462,7 +488,7 @@ private fun SavingsApp(
                                 else mutate { store.reorderAccounts(accounts.map { it.id }.reversed()) }
                                 descending = !descending
                             }))),
-                        ), collapseOnSelection = false) { MoreDots("排序菜单") }
+                        ), collapseOnSelection = false) { Icon(MiuixIcons.More, contentDescription = "排序菜单", modifier = Modifier.size(24.dp)) }
                     }
                 },
                 navigationIcon = {
@@ -494,19 +520,19 @@ private fun SavingsApp(
                         verticalAlignment = Alignment.CenterVertically) {
                         Text("目标列表", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         OverlayIconDropdownMenu(entry = DropdownEntry(listOf(
-                            DropdownItem("新建目标", onClick = { editingGoal = null; goalEditor = true }),
+                            DropdownItem("新建目标", onClick = { editingGoalId = null; goalEditor = true }),
                             DropdownItem("排序", onClick = { navigate(6) }),
-                        ))) { MoreDots("目标菜单") }
+                        ))) { Icon(MiuixIcons.More, contentDescription = "目标菜单", modifier = Modifier.size(24.dp)) }
                     }
                     if (goals.isEmpty()) {
                         EmptyCard("star", "第一个心愿，从这里开始", "旅行、应急金、心仪的礼物……\n给目标起个名字，让积累看得见。", "创建我的目标") {
-                            editingGoal = null; goalEditor = true
+                            editingGoalId = null; goalEditor = true
                         }
                     }
                     goals.forEach { goal ->
                         GoalCard(goal, accounts,
-                            onEdit = { editingGoal = goal; goalEditor = true },
-                            onDelete = { deletingGoal = goal },
+                            onEdit = { editingGoalId = goal.id; goalEditor = true },
+                            onDelete = { deletingGoal = goal; deletingGoalVisible = true },
                             onSync = { navigate(1) }, compact = appearance.compactList)
                     }
                     Note("目标之间独立计算；同一账户可关联多个目标，不代表资金已分开存放。")
@@ -552,12 +578,12 @@ private fun SavingsApp(
                         verticalAlignment = Alignment.CenterVertically) {
                         Text("我的账户", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                         OverlayIconDropdownMenu(entry = DropdownEntry(listOf(
-                            DropdownItem("添加账户", onClick = { editingAccount = null; accountEditor = true }),
+                            DropdownItem("添加账户", onClick = { editingAccountId = null; accountEditor = true }),
                             DropdownItem("排序", onClick = { navigate(7) }),
-                        ))) { MoreDots("账户菜单") }
+                        ))) { Icon(MiuixIcons.More, contentDescription = "账户菜单", modifier = Modifier.size(24.dp)) }
                     }
                     if (accounts.isEmpty()) EmptyCard("bank", "先连接一份积累", "添加与小星记账完全相同的账户名称，\n就能为攒钱目标提供余额。", "添加第一个账户") {
-                        editingAccount = null; accountEditor = true
+                        editingAccountId = null; accountEditor = true
                     }
                     accounts.forEach { account ->
                         Panel {
@@ -575,26 +601,40 @@ private fun SavingsApp(
                                 Button(onClick = { capture(account) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColorsPrimary()) {
                                     Text("读取小星余额", fontSize = 13.sp)
                                 }
-                                Button(onClick = { editingAccount = account; accountEditor = true }) { Text("编辑", fontSize = 13.sp) }
-                                Button(onClick = { deletingAccount = account }) { Text("删除", fontSize = 13.sp) }
+                                Button(onClick = { editingAccountId = account.id; accountEditor = true }) { Text("编辑", fontSize = 13.sp) }
+                                Button(onClick = { deletingAccount = account; deletingAccountVisible = true }) { Text("删除", fontSize = 13.sp) }
                             }
                         }
                     }
                     Note("仅支持人民币。余额来自记账数据或手动填写，与银行实际余额可能有差异。")
                 }
                 6 -> {
-                    goals.forEach { goal -> key(goal.id) {
-                        SortCard(goal.title, Money.format(goal.target), goal.id, goals.map { it.id }, pageScrollState, viewportTop, viewportHeight) { ids ->
-                            mutate { store.reorderGoals(ids) }
+                    var goalOrder by remember(goals) { mutableStateOf(goals.map { it.id }) }
+                    goalOrder.forEach { id ->
+                        val goal = goals.firstOrNull { it.id == id }
+                        if (goal != null) key(id) {
+                            SortCard(goal.title, Money.format(goal.target), goal.id, goalOrder,
+                                pageScrollState, viewportTop, viewportHeight,
+                                onMove = { goalOrder = it },
+                                onCommit = { ids ->
+                                    if (!mutate { store.reorderGoals(ids) }) goalOrder = goals.map { it.id }
+                                })
                         }
-                    } }
+                    }
                 }
                 7 -> {
-                    accounts.forEach { account -> key(account.id) {
-                        SortCard(account.name, Money.format(account.balance), account.id, accounts.map { it.id }, pageScrollState, viewportTop, viewportHeight) { ids ->
-                            mutate { store.reorderAccounts(ids) }
+                    var accountOrder by remember(accounts) { mutableStateOf(accounts.map { it.id }) }
+                    accountOrder.forEach { id ->
+                        val account = accounts.firstOrNull { it.id == id }
+                        if (account != null) key(id) {
+                            SortCard(account.name, Money.format(account.balance), account.id, accountOrder,
+                                pageScrollState, viewportTop, viewportHeight,
+                                onMove = { accountOrder = it },
+                                onCommit = { ids ->
+                                    if (!mutate { store.reorderAccounts(ids) }) accountOrder = accounts.map { it.id }
+                                })
                         }
-                    } }
+                    }
                 }
                 2 -> {
                     SmallTitle(text = "外观", textColor = accent,
@@ -731,49 +771,103 @@ private fun SavingsApp(
         }
       }
     }
-    pendingBackup?.let { backup -> AppDialog("导入备份？", { if (!backupBusy) pendingBackup = null }) {
-        Note("备份包含 ${backup.accounts.size} 个账户、${backup.goals.size} 个目标，以及外观设置和一言。确认后将替换当前数据，无法撤销；建议先导出当前数据。")
-        Button(onClick = {
-            scope.launch {
-                backupBusy = true
-                try {
-                    withContext(Dispatchers.IO) { store.importBackup(backup) }
-                    hitokoto = backup.hitokoto
-                    pendingBackup = null
-                    refresh()
-                    notify("备份已导入")
-                } catch (error: Exception) {
-                    if (error is CancellationException) throw error
-                    notify("导入失败：${error.message ?: "保存失败"}")
-                } finally { backupBusy = false }
+    DialogHost(importVisible) { finished ->
+        pendingBackup?.let { backup ->
+            AppDialog(
+                show = importVisible,
+                title = "导入备份？",
+                onDismiss = { if (!backupBusy) importVisible = false },
+                onDismissFinished = { pendingBackupJson = null; finished() },
+            ) {
+                Note("备份包含 ${backup.accounts.size} 个账户、${backup.goals.size} 个目标，以及外观设置和一言。确认后将替换当前数据，无法撤销；建议先导出当前数据。")
+                Button(onClick = {
+                    scope.launch {
+                        backupBusy = true
+                        try {
+                            withContext(Dispatchers.IO) { store.importBackup(backup) }
+                            hitokoto = backup.hitokoto
+                            importVisible = false
+                            refresh()
+                            notify("备份已导入")
+                        } catch (error: Exception) {
+                            if (error is CancellationException) throw error
+                            notify("导入失败：${error.message ?: "保存失败"}")
+                        } finally { backupBusy = false }
+                    }
+                }, enabled = !backupBusy, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColorsPrimary()) { Text("确认替换并导入") }
+                Button(onClick = { importVisible = false }, enabled = !backupBusy, modifier = Modifier.fillMaxWidth()) { Text("取消") }
             }
-        }, enabled = !backupBusy, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColorsPrimary()) { Text("确认替换并导入") }
-        Button(onClick = { pendingBackup = null }, enabled = !backupBusy, modifier = Modifier.fillMaxWidth()) { Text("取消") }
-    } }
-    if (goalEditor) GoalEditor(editingGoal, accounts, onDismiss = { goalEditor = false }, onSave = {
-        if (mutate { store.saveGoal(it) }) goalEditor = false
-    }, onAddAccount = { goalEditor = false; navigate(1); editingAccount = null; accountEditor = true })
-    if (accountEditor) AccountEditor(editingAccount, onDismiss = { accountEditor = false }, onSave = {
-        if (mutate { store.saveAccount(it) }) accountEditor = false
-    })
-    if (disclosure) AppDialog("读取小星记账余额", { disclosure = false }) {
-        Note("在系统设置启用「星愿攒钱 · 读取小星账户」后，应用会获得读取小星记账可见文字的能力。")
-        Note("仅当你点击「读取小星余额」后，两分钟内识别指定账户详情中的名称及人民币余额。识别结果须返回本应用确认，才会更新目标。")
-        Note("不会读取其他应用、收集截图或上传数据，不会执行点击、记账或转账。页面结构变化时可能无法识别，请使用手动更新。你可随时在系统设置关闭此权限。")
-        Button(onClick = { disclosure = false; openReaderSettings() }, modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColorsPrimary()) { Text("了解并前往系统设置") }
-        Button(onClick = { disclosure = false }, modifier = Modifier.fillMaxWidth()) { Text("暂不开启") }
+        }
     }
-    deletingGoal?.let { goal -> AppDialog("删除这个心愿？", { deletingGoal = null }) {
-        Note("将删除「${goal.title}」，关联账户会保留。此操作无法撤销。")
-        Button(onClick = { if (mutate { store.deleteGoal(goal.id) }) deletingGoal = null },
-            modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColorsPrimary()) { Text("确认删除") }
-    } }
-    deletingAccount?.let { account -> AppDialog("删除这个账户？", { deletingAccount = null }) {
-        Note("将删除「${account.name}」。如有目标关联此账户，请先编辑目标解除关联。")
-        Button(onClick = { if (mutate { store.deleteAccount(account.id) }) deletingAccount = null },
-            modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColorsPrimary()) { Text("确认删除") }
-    } }
+    DialogHost(goalEditor) { finished ->
+        GoalEditor(
+            show = goalEditor,
+            existing = editingGoal,
+            accounts = accounts,
+            onDismiss = { goalEditor = false },
+            onDismissFinished = { editingGoalId = null; finished() },
+            onSave = { if (mutate { store.saveGoal(it) }) goalEditor = false },
+            onAddAccount = { goalEditor = false; navigate(1); editingAccountId = null; accountEditor = true },
+        )
+    }
+    DialogHost(accountEditor) { finished ->
+        AccountEditor(
+            show = accountEditor,
+            existing = editingAccount,
+            onDismiss = { accountEditor = false },
+            onDismissFinished = { editingAccountId = null; finished() },
+            onSave = { if (mutate { store.saveAccount(it) }) accountEditor = false },
+        )
+    }
+    DialogHost(disclosure) { finished ->
+        AppDialog(
+            show = disclosure,
+            title = "读取小星记账余额",
+            onDismiss = { disclosure = false },
+            onDismissFinished = finished,
+        ) {
+            Note("在系统设置启用「星愿攒钱 · 读取小星账户」后，应用会获得读取小星记账可见文字的能力。")
+            Note("仅当你点击「读取小星余额」后，两分钟内识别指定账户详情中的名称及人民币余额。识别结果须返回本应用确认，才会更新目标。")
+            Note("不会读取其他应用、收集截图或上传数据，不会执行点击、记账或转账。页面结构变化时可能无法识别，请使用手动更新。你可随时在系统设置关闭此权限。")
+            Button(onClick = { disclosure = false; openReaderSettings() }, modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColorsPrimary()) { Text("了解并前往系统设置") }
+            Button(onClick = { disclosure = false }, modifier = Modifier.fillMaxWidth()) { Text("暂不开启") }
+        }
+    }
+    DialogHost(deletingGoalVisible) { finished ->
+        deletingGoal?.let { goal ->
+            AppDialog(
+                show = deletingGoalVisible,
+                title = "删除这个心愿？",
+                onDismiss = { deletingGoalVisible = false },
+                onDismissFinished = { deletingGoal = null; finished() },
+            ) {
+                Note("将删除「${goal.title}」，关联账户会保留。此操作无法撤销。")
+                Button(onClick = { if (mutate { store.deleteGoal(goal.id) }) deletingGoalVisible = false },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.error,
+                        contentColor = MiuixTheme.colorScheme.onError)) { Text("删除") }
+                Button(onClick = { deletingGoalVisible = false }, modifier = Modifier.fillMaxWidth()) { Text("取消") }
+            }
+        }
+    }
+    DialogHost(deletingAccountVisible) { finished ->
+        deletingAccount?.let { account ->
+            AppDialog(
+                show = deletingAccountVisible,
+                title = "删除这个账户？",
+                onDismiss = { deletingAccountVisible = false },
+                onDismissFinished = { deletingAccount = null; finished() },
+            ) {
+                Note("将删除「${account.name}」。如有目标关联此账户，请先编辑目标解除关联。")
+                Button(onClick = { if (mutate { store.deleteAccount(account.id) }) deletingAccountVisible = false },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.error,
+                        contentColor = MiuixTheme.colorScheme.onError)) { Text("删除") }
+                Button(onClick = { deletingAccountVisible = false }, modifier = Modifier.fillMaxWidth()) { Text("取消") }
+            }
+        }
+    }
 }
 
 @Composable private fun Overview(goals: List<SavingGoal>, accounts: List<BankAccount>, appearance: Appearance, accent: Color) {
@@ -785,8 +879,8 @@ private fun SavingsApp(
     val subtle = foreground.copy(alpha = if (status) .7f else .82f)
     val base = if (status) MiuixTheme.colorScheme.primaryContainer else accent
     val fill = if (status) MiuixTheme.colorScheme.onPrimaryContainer else MiuixTheme.colorScheme.onPrimary
-    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(base)
-        .semantics { contentDescription = "首页横幅 ${featured?.title ?: "尚无目标"} ${if (completed) "苦尽甘来" else "${(progress * 100).toInt()}%"}" }) {
+    Box(Modifier.fillMaxWidth().squircleSurface(color = base, cornerRadius = 22.dp)
+        .clearAndSetSemantics { contentDescription = "首页横幅 ${featured?.title ?: "尚无目标"} ${if (completed) "苦尽甘来" else "${(progress * 100).toInt()}%"}" }) {
         Box(Modifier.align(Alignment.TopEnd).offset(x = 28.dp, y = (-18).dp).size(134.dp), contentAlignment = Alignment.Center) {
             if (completed) Text("🎉", fontSize = 86.sp, modifier = Modifier.graphicsLayer { alpha = .28f })
             else Symbol("star", foreground.copy(alpha = .12f), Modifier.size(120.dp))
@@ -859,19 +953,42 @@ private fun SavingsApp(
     }
 }
 
-@Composable private fun GoalEditor(existing: SavingGoal?, accounts: List<BankAccount>, onDismiss: () -> Unit, onSave: (SavingGoal) -> Unit, onAddAccount: () -> Unit) {
+@Composable private fun GoalEditor(
+    show: Boolean,
+    existing: SavingGoal?,
+    accounts: List<BankAccount>,
+    onDismiss: () -> Unit,
+    onDismissFinished: () -> Unit,
+    onSave: (SavingGoal) -> Unit,
+    onAddAccount: () -> Unit,
+) {
     var title by rememberSaveable(existing?.id) { mutableStateOf(existing?.title.orEmpty()) }
     var amount by rememberSaveable(existing?.id) { mutableStateOf(existing?.let { Money.input(it.target) }.orEmpty()) }
     var date by rememberSaveable(existing?.id) { mutableStateOf(existing?.deadline.orEmpty()) }
     var selected by rememberSaveable(existing?.id) { mutableStateOf(existing?.accountIds?.toList() ?: emptyList<String>()) }
     var growth by rememberSaveable(existing?.id) { mutableStateOf(existing?.mode == GoalMode.GROWTH) }
-    var error by remember { mutableStateOf("") }
-    AppDialog(if (existing == null) "新建一个心愿" else "编辑心愿", onDismiss) {
-        TextField(value = title, onValueChange = { title = it.take(40) }, label = "心愿名称，如：去看一次极光", singleLine = true)
-        TextField(value = amount, onValueChange = { amount = it.take(18) }, label = "目标金额（元）", singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-        TextField(value = date, onValueChange = { date = it.take(10) }, label = "截止日期 YYYY-MM-DD（选填）", singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii))
+    var titleError by remember { mutableStateOf("") }
+    var amountError by remember { mutableStateOf("") }
+    var dateError by remember { mutableStateOf("") }
+    var accountError by remember { mutableStateOf("") }
+    AppDialog(
+        show = show,
+        title = if (existing == null) "新建一个心愿" else "编辑心愿",
+        onDismiss = onDismiss,
+        onDismissFinished = onDismissFinished,
+    ) {
+        TextField(value = title, onValueChange = { title = it.take(40); titleError = "" },
+            label = "心愿名称，如：去看一次极光", singleLine = true,
+            colors = dialogFieldColors(titleError.isNotEmpty()))
+        FieldError(titleError)
+        TextField(value = amount, onValueChange = { amount = it.take(18); amountError = "" }, label = "目标金额（元）", singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            colors = dialogFieldColors(amountError.isNotEmpty()))
+        FieldError(amountError)
+        TextField(value = date, onValueChange = { date = it.take(10); dateError = "" }, label = "截止日期 YYYY-MM-DD（选填）", singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+            colors = dialogFieldColors(dateError.isNotEmpty()))
+        FieldError(dateError)
         Text("关联账户", fontWeight = FontWeight.Bold, fontSize = 15.sp)
         if (accounts.isEmpty()) {
             Note("还没有账户，先添加一个账户再创建目标。")
@@ -882,37 +999,40 @@ private fun SavingsApp(
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
                 .background(if (checked) MiuixTheme.colorScheme.primaryContainer else MiuixTheme.colorScheme.secondaryContainer)
                 .toggleable(value = checked, role = Role.Checkbox,
-                    onValueChange = { selected = if (it) selected + account.id else selected - account.id }).padding(14.dp),
+                    onValueChange = { selected = if (it) selected + account.id else selected - account.id; accountError = "" })
+                .padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(if (checked) "●" else "○", color = MiuixTheme.colorScheme.primary, fontSize = 20.sp)
+                Checkbox(state = if (checked) ToggleableState.On else ToggleableState.Off, onClick = null,
+                    modifier = Modifier.clearAndSetSemantics {})
                 Column(Modifier.weight(1f)) {
                     Text(account.name, fontSize = 14.sp)
                     Text("¥ ${Money.format(account.balance)}", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                 }
             }
         }
+        FieldError(accountError)
         Text("进度计算方式", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { growth = false }, modifier = Modifier.weight(1f),
-                colors = if (!growth) ButtonDefaults.buttonColorsPrimary() else ButtonDefaults.buttonColors()) { Text("当前余额", fontSize = 12.sp) }
-            Button(onClick = { growth = true }, modifier = Modifier.weight(1f),
-                colors = if (growth) ButtonDefaults.buttonColorsPrimary() else ButtonDefaults.buttonColors()) { Text("从现在开始攒", fontSize = 12.sp) }
+        Row(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ModeOption("当前余额", !growth, Modifier.weight(1f)) { growth = false }
+            ModeOption("从现在开始攒", growth, Modifier.weight(1f)) { growth = true }
         }
         Note(if (growth) "以当前合计余额为起点，只计算之后新增的积累。" else "以所选账户的当前余额合计作为已攒金额。")
         Note("目标进度条与图标跟随应用强调色，可在设置中统一调整。")
-        if (error.isNotEmpty()) Text(error, color = MiuixTheme.colorScheme.error, fontSize = 13.sp)
         Button(onClick = {
             val target = Money.parse(amount)
             val parsedDate = if (date.isBlank()) null else runCatching { LocalDate.parse(date) }.getOrNull()
-            error = when {
-                title.isBlank() -> "给心愿起个名字吧"
-                target == null || target <= 0 -> "请输入大于 0 的有效金额，最多两位小数"
-                selected.isEmpty() -> "请选择至少一个账户"
-                date.isNotBlank() && (parsedDate == null || parsedDate.toString() != date) -> "日期格式应为 YYYY-MM-DD，例如 2027-12-31"
-                parsedDate != null && parsedDate < LocalDate.now() && date != existing?.deadline -> "请选择今天或之后的日期"
+            titleError = if (title.isBlank()) "给心愿起个名字吧" else ""
+            amountError = if (target == null || target <= 0) "请输入大于 0 的有效金额，最多两位小数" else ""
+            accountError = if (selected.isEmpty()) "请选择至少一个账户" else ""
+            dateError = when {
+                date.isNotBlank() && (parsedDate == null || parsedDate.toString() != date) ->
+                    "日期格式应为 YYYY-MM-DD，例如 2027-12-31"
+                parsedDate != null && parsedDate < LocalDate.now() && date != existing?.deadline ->
+                    "请选择今天或之后的日期"
                 else -> ""
             }
-            if (error.isEmpty() && target != null) {
+            if (titleError.isEmpty() && amountError.isEmpty() && accountError.isEmpty() &&
+                dateError.isEmpty() && target != null) {
                 val mode = if (growth) GoalMode.GROWTH else GoalMode.BALANCE
                 val unchanged = existing != null && existing.accountIds == selected.toSet() && existing.mode == mode
                 val baseline = if (unchanged) existing.baseline else accounts.filter { it.id in selected }.sumOf { it.balance }
@@ -925,21 +1045,48 @@ private fun SavingsApp(
     }
 }
 
-@Composable private fun AccountEditor(existing: BankAccount?, onDismiss: () -> Unit, onSave: (BankAccount) -> Unit) {
+@Composable private fun RowScope.ModeOption(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    Row(modifier.clip(RoundedCornerShape(16.dp))
+        .background(if (selected) MiuixTheme.colorScheme.primaryContainer else MiuixTheme.colorScheme.secondaryContainer)
+        .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+        .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        RadioButton(selected = selected, onClick = null, modifier = Modifier.clearAndSetSemantics {})
+        Text(label, fontSize = 13.sp)
+    }
+}
+
+@Composable private fun AccountEditor(
+    show: Boolean,
+    existing: BankAccount?,
+    onDismiss: () -> Unit,
+    onDismissFinished: () -> Unit,
+    onSave: (BankAccount) -> Unit,
+) {
     var name by rememberSaveable(existing?.id) { mutableStateOf(existing?.name.orEmpty()) }
     var balance by rememberSaveable(existing?.id) { mutableStateOf(existing?.let { Money.input(it.balance) }.orEmpty()) }
-    var error by remember { mutableStateOf("") }
-    AppDialog(if (existing == null) "添加储蓄账户" else "编辑账户", onDismiss) {
+    var nameError by remember { mutableStateOf("") }
+    var balanceError by remember { mutableStateOf("") }
+    AppDialog(
+        show = show,
+        title = if (existing == null) "添加储蓄账户" else "编辑账户",
+        onDismiss = onDismiss,
+        onDismissFinished = onDismissFinished,
+    ) {
         Note("使用与小星记账完全一致的账户名称。初始余额请手动填写；之后可读取并确认更新。")
-        TextField(value = name, onValueChange = { name = it.take(40) }, label = "账户名称，如：招商银行储蓄卡", singleLine = true)
-        TextField(value = balance, onValueChange = { balance = it.take(18) }, label = "当前人民币余额（元）", singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+        TextField(value = name, onValueChange = { name = it.take(40); nameError = "" }, label = "账户名称，如：招商银行储蓄卡", singleLine = true,
+            colors = dialogFieldColors(nameError.isNotEmpty()))
+        FieldError(nameError)
+        TextField(value = balance, onValueChange = { balance = it.take(18); balanceError = "" }, label = "当前人民币余额（元）", singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            colors = dialogFieldColors(balanceError.isNotEmpty()))
+        FieldError(balanceError)
         Note("仅支持人民币储蓄账户，不将信用卡额度当作存款。")
-        if (error.isNotEmpty()) Text(error, color = MiuixTheme.colorScheme.error, fontSize = 13.sp)
         Button(onClick = {
             val cents = Money.parse(balance)
-            error = when { name.isBlank() -> "请输入账户名称"; cents == null -> "请输入有效余额，最多两位小数"; else -> "" }
-            if (error.isEmpty() && cents != null) {
+            nameError = if (name.isBlank()) "请输入账户名称" else ""
+            balanceError = if (cents == null) "请输入有效余额，最多两位小数" else ""
+            if (nameError.isEmpty() && balanceError.isEmpty() && cents != null) {
                 val balanceChanged = existing == null || cents != existing.balance
                 onSave(BankAccount(existing?.id ?: UUID.randomUUID().toString(), name.trim(), cents,
                     if (balanceChanged) System.currentTimeMillis() else existing.updatedAt,
@@ -949,8 +1096,35 @@ private fun SavingsApp(
     }
 }
 
-@Composable private fun AppDialog(title: String, onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    WindowDialog(show = true, title = title, onDismissRequest = onDismiss) {
+@Composable private fun dialogFieldColors(invalid: Boolean): TextFieldColors = TextFieldDefaults.textFieldColors(
+    backgroundColor = if (invalid) MiuixTheme.colorScheme.errorContainer else MiuixTheme.colorScheme.secondaryContainer,
+    labelColor = if (invalid) MiuixTheme.colorScheme.onErrorContainer else MiuixTheme.colorScheme.onSecondaryContainer,
+    borderColor = if (invalid) MiuixTheme.colorScheme.error else MiuixTheme.colorScheme.primary,
+)
+
+@Composable private fun FieldError(text: String) {
+    if (text.isNotEmpty()) Text(text, color = MiuixTheme.colorScheme.error, fontSize = 12.sp)
+}
+
+/**
+ * Keeps a dialog composed until Miuix reports that its hide animation finished, so the exit
+ * animation is not cut off by removing the composable. Draft state is keyed by the edited id,
+ * so it is dropped together with the host and a later reopen starts from saved values.
+ */
+@Composable private fun DialogHost(show: Boolean, content: @Composable (onDismissFinished: () -> Unit) -> Unit) {
+    var mounted by remember { mutableStateOf(show) }
+    LaunchedEffect(show) { if (show) mounted = true }
+    if (mounted) content { mounted = false }
+}
+
+@Composable private fun AppDialog(
+    show: Boolean,
+    title: String,
+    onDismiss: () -> Unit,
+    onDismissFinished: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    WindowDialog(show = show, title = title, onDismissRequest = onDismiss, onDismissFinished = onDismissFinished) {
         Column(Modifier.heightIn(max = 620.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             content()
@@ -958,19 +1132,19 @@ private fun SavingsApp(
     }
 }
 
-@Composable private fun MoreDots(description: String) {
-    val color = MiuixTheme.colorScheme.onSurfaceContainer
-    Canvas(Modifier.size(24.dp).semantics { contentDescription = description }) {
-        val radius = 1.7.dp.toPx()
-        listOf(.25f, .5f, .75f).forEach { fraction ->
-            drawCircle(color, radius, Offset(size.width / 2f, size.height * fraction))
-        }
+@Composable private fun Symbol(kind: String, color: Color, modifier: Modifier) {
+    val icon = when (kind) {
+        "star" -> MiuixIcons.Favorites
+        "bank" -> MiuixIcons.BankCards
+        "link" -> MiuixIcons.Link
+        else -> MiuixIcons.More
     }
+    Icon(icon, contentDescription = null, modifier = modifier, tint = color)
 }
 
 @Composable private fun SortCard(
     title: String, amount: String, id: String, ids: List<String>, scrollState: ScrollState, viewportTop: Float,
-    viewportHeight: Float, onReorder: (List<String>) -> Boolean,
+    viewportHeight: Float, onMove: (List<String>) -> Unit, onCommit: (List<String>) -> Unit,
 ) {
     val color = MiuixTheme.colorScheme.onSurfaceVariantActions
     val density = androidx.compose.ui.platform.LocalDensity.current
@@ -987,13 +1161,22 @@ private fun SavingsApp(
         animationSpec = if (dragging) snap() else tween(220), label = "sortDrop")
     val lift by animateFloatAsState(if (dragging) 1f else 0f,
         animationSpec = tween(160), label = "sortLift")
-    fun move(step: Int): Boolean {
-        val from = ids.indexOf(id)
+    // Recomposition delivers the latest order while the pointer callback keeps its first capture.
+    val currentIds by rememberUpdatedState(ids)
+    val currentOnMove by rememberUpdatedState(onMove)
+    val currentOnCommit by rememberUpdatedState(onCommit)
+    val dragStartIds = remember { mutableStateOf(ids) }
+    val reorder: (Int, Boolean) -> Boolean = { step, commit ->
+        val list = currentIds
+        val from = list.indexOf(id)
         val to = from + step
-        if (from !in ids.indices || to !in ids.indices) return false
-        return onReorder(ids.toMutableList().apply { add(to, removeAt(from)) })
+        if (from !in list.indices || to !in list.indices) false else {
+            val next = list.toMutableList().apply { add(to, removeAt(from)) }
+            currentOnMove(next)
+            if (commit) currentOnCommit(next)
+            true
+        }
     }
-    val currentMove by rememberUpdatedState<(Int) -> Boolean> { step -> move(step) }
     val edge = with(density) { 64.dp.toPx() }
     val direction = if (dragging && viewportHeight > 0f) when {
         pointerY < viewportTop + edge -> -1
@@ -1007,7 +1190,7 @@ private fun SavingsApp(
             displacement += scrolled
             val stride = rowHeight + with(density) { 12.dp.toPx() }
             if (kotlin.math.abs(displacement) >= stride / 2f) {
-                if (currentMove(direction)) displacement -= direction * stride
+                if (reorder(direction, false)) displacement -= direction * stride
                 else displacement = 0f
             }
             delay(16)
@@ -1036,14 +1219,20 @@ private fun SavingsApp(
                 .semantics {
                     contentDescription = "拖动排序 $title"
                     customActions = listOf(
-                        CustomAccessibilityAction("上移") { move(-1) },
-                        CustomAccessibilityAction("下移") { move(1) },
+                        CustomAccessibilityAction("上移") { reorder(-1, true) },
+                        CustomAccessibilityAction("下移") { reorder(1, true) },
                     )
                 }
                 .pointerInput(id) {
                     detectDragGestures(
-                        onDragStart = { displacement = 0f; pointerY = handleTop + it.y; dragging = true },
-                        onDragEnd = { displacement = 0f; dragging = false },
+                        onDragStart = {
+                            displacement = 0f; pointerY = handleTop + it.y; dragging = true
+                            dragStartIds.value = currentIds
+                        },
+                        onDragEnd = {
+                            displacement = 0f; dragging = false
+                            if (currentIds != dragStartIds.value) currentOnCommit(currentIds)
+                        },
                         onDragCancel = { displacement = 0f; dragging = false },
                     ) { change, dragAmount ->
                         change.consume()
@@ -1052,7 +1241,7 @@ private fun SavingsApp(
                         val stride = rowHeight + with(density) { 12.dp.toPx() }
                         if (kotlin.math.abs(displacement) >= stride / 2f) {
                             val step = if (displacement > 0f) 1 else -1
-                            if (currentMove(step)) displacement -= step * stride
+                            if (reorder(step, false)) displacement -= step * stride
                             else displacement = 0f
                         }
                     }
@@ -1080,12 +1269,14 @@ private fun SavingsApp(
     Text(text, fontSize = 12.sp, lineHeight = 20.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
 }
 @Composable private fun Badge(text: String, color: Color) {
-    Box(Modifier.clip(RoundedCornerShape(8.dp)).background(color.copy(alpha = .1f)).padding(horizontal = 9.dp, vertical = 5.dp)) {
+    Box(Modifier.squircleSurface(color = color.copy(alpha = .12f), cornerRadius = 8.dp)
+        .padding(horizontal = 9.dp, vertical = 5.dp)) {
         Text(text, fontSize = 10.sp, color = color, fontWeight = FontWeight.Medium)
     }
 }
 @Composable private fun IconTile(kind: String, color: Color) {
-    Box(Modifier.size(44.dp).clip(RoundedCornerShape(15.dp)).background(color.copy(alpha = .1f)), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(44.dp).squircleSurface(color = color.copy(alpha = .1f), cornerRadius = 15.dp),
+        contentAlignment = Alignment.Center) {
         Symbol(kind, color, Modifier.size(24.dp))
     }
 }
@@ -1107,40 +1298,6 @@ private fun SavingsApp(
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(title, fontSize = 15.sp, fontWeight = FontWeight.Medium)
             Note(body)
-        }
-    }
-}
-@Composable private fun Symbol(kind: String, color: Color, modifier: Modifier) {
-    Canvas(modifier) {
-        val w = size.width; val h = size.height
-        val stroke = Stroke(1.8.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round)
-        when (kind) {
-            "star" -> {
-                val path = Path()
-                repeat(10) { i ->
-                    val angle = (i * Math.PI / 5 - Math.PI / 2)
-                    val radius = if (i % 2 == 0) .44f else .21f
-                    val x = w * (.5f + radius * kotlin.math.cos(angle).toFloat())
-                    val y = h * (.5f + radius * kotlin.math.sin(angle).toFloat())
-                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
-                }
-                path.close(); drawPath(path, color, style = stroke)
-            }
-            "bank" -> {
-                val path = Path().apply { moveTo(w * .12f, h * .32f); lineTo(w * .5f, h * .1f); lineTo(w * .88f, h * .32f); close() }
-                drawPath(path, color, style = stroke)
-                listOf(.24f, .5f, .76f).forEach { x -> drawLine(color, Offset(w * x, h * .45f), Offset(w * x, h * .76f), stroke.width) }
-                drawLine(color, Offset(w * .12f, h * .88f), Offset(w * .88f, h * .88f), stroke.width)
-            }
-            "link" -> {
-                drawLine(color, Offset(w * .25f, h * .65f), Offset(w * .65f, h * .25f), stroke.width)
-                drawCircle(color, w * .2f, Offset(w * .3f, h * .7f), style = stroke)
-                drawCircle(color, w * .2f, Offset(w * .7f, h * .3f), style = stroke)
-            }
-            else -> {
-                drawCircle(color, w * .4f, style = stroke)
-                listOf(.3f, .5f, .7f).forEach { drawCircle(color, w * .045f, Offset(w * it, h * .5f)) }
-            }
         }
     }
 }

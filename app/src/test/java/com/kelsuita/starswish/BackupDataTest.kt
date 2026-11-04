@@ -1,6 +1,6 @@
-package com.starsavings.app
+package com.kelsuita.starswish
 
-import com.starsavings.app.data.*
+import com.kelsuita.starswish.data.*
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -62,5 +62,13 @@ class BackupDataTest {
         ).forEach { value -> assertThrows(IllegalArgumentException::class.java) { value.toJson() } }
         assertThrows(IllegalArgumentException::class.java) { BackupData.fromJson("{}") }
         assertThrows(IllegalArgumentException::class.java) { BackupData.fromJson("x".repeat(BackupData.MAX_BYTES + 1)) }
+    }
+
+    @Test fun validationReasonSurvivesJsonParsing() {
+        val badVersion = backup().toJson().replace("\"version\": 1", "\"version\": 2")
+        val versionError = assertThrows(IllegalArgumentException::class.java) {
+            BackupData.fromJson(badVersion)
+        }
+        assertTrue(versionError.message.orEmpty().contains("不是支持的星愿备份文件"))
     }
 }

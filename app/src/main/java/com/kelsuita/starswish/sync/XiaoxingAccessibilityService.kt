@@ -1,12 +1,13 @@
-package com.starsavings.app.sync
+package com.kelsuita.starswish.sync
 
 import android.accessibilityservice.AccessibilityService
 import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import com.starsavings.app.data.BalanceCandidate
-import com.starsavings.app.data.SavingsStore
+import com.kelsuita.starswish.data.BalanceCandidate
+import com.kelsuita.starswish.data.CaptureRequest
+import com.kelsuita.starswish.data.SavingsStore
 
 class XiaoxingAccessibilityService : AccessibilityService() {
     private val store by lazy { SavingsStore(this) }
@@ -14,6 +15,17 @@ class XiaoxingAccessibilityService : AccessibilityService() {
     private val capsule by lazy { BalanceReadCapsule(this) }
     private var detailWindowId: Int? = null
     private var readPending = false
+    // Accessibility events can arrive in bursts; avoid re-parsing the request JSON on each one.
+    private var cachedRequest: CaptureRequest? = null
+    private var cachedRequestAt = 0L
+    private fun currentRequest(): CaptureRequest? {
+        val now = System.currentTimeMillis()
+        if (now - cachedRequestAt >= 500) {
+            cachedRequest = runCatching { store.request() }.getOrNull()
+            cachedRequestAt = now
+        }
+        return cachedRequest
+    }
     private val readPage = Runnable {
         readPending = false
         captureDetail()
@@ -23,10 +35,11 @@ class XiaoxingAccessibilityService : AccessibilityService() {
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             // Content/scroll event class names describe views, not the containing Activity.
             detailWindowId = if (event.className?.toString() == ACCOUNT_DETAIL_ACTIVITY) event.windowId else null
+            cachedRequestAt = 0L
             handler.removeCallbacks(readPage)
             readPending = false
         }
-        if (detailWindowId != event.windowId || store.request() == null) return
+        if (detailWindowId != event.windowId || currentRequest() == null) return
         // Wait for the page's text nodes to populate; coalesce bursts without losing the last event.
         if (!readPending) {
             readPending = true
@@ -34,9 +47,14 @@ class XiaoxingAccessibilityService : AccessibilityService() {
         }
     }
     private fun captureDetail() {
-        val request = store.request() ?: return
+        val request = currentRequest() ?: return
         val now = System.currentTimeMillis()
-        if (now > request.expiresAt) { store.cancelCapture(); return }
+        if (now > request.expiresAt) {
+            cachedRequest = null
+            cachedRequestAt = 0L
+            runCatching { store.cancelCapture() }
+            return
+        }
         val account = store.accounts().firstOrNull { it.id == request.accountId } ?: return
         val root = rootInActiveWindow ?: return
         if (root.packageName?.toString() != XIAOXING_PACKAGE || root.windowId != detailWindowId) return
@@ -45,6 +63,8 @@ class XiaoxingAccessibilityService : AccessibilityService() {
         val balance = BalanceParser.parseAccountDetail(lines, account.name) ?: return
         // Persist only the proposed value; no balance changes until confirmed inside our app.
         store.stage(BalanceCandidate(account.id, balance, now))
+        cachedRequest = null
+        cachedRequestAt = 0L
         capsule.show()
     }
     private fun collect(node: AccessibilityNodeInfo, lines: MutableList<String>, depth: Int) {
@@ -64,11 +84,17 @@ class XiaoxingAccessibilityService : AccessibilityService() {
         handler.removeCallbacks(readPage)
         readPending = false
         detailWindowId = null
-        store.cancelCapture()
+        cachedRequest = null
+        cachedRequestAt = 0L
+        runCatching { store.cancelCapture() }
     }
     override fun onDestroy() {
         capsule.hide()
         handler.removeCallbacks(readPage)
+        readPending = false
+        detailWindowId = null
+        cachedRequest = null
+        runCatching { store.cancelCapture() }
         super.onDestroy()
     }
     companion object {

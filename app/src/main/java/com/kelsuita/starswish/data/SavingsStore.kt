@@ -1,4 +1,4 @@
-package com.starsavings.app.data
+package com.kelsuita.starswish.data
 
 import android.content.Context
 import org.json.JSONArray
@@ -68,19 +68,28 @@ class SavingsStore(context: Context) {
     }
 
     @Synchronized fun accounts(): List<BankAccount> = readArray("accounts").let { array ->
-        (0 until array.length()).map { i -> array.getJSONObject(i).let {
-            BankAccount(it.getString("id"), it.getString("name"), it.getLong("balance"),
-                it.getLong("updatedAt"), it.optString("source", "手动录入"), it.optLong("createdAt", i.toLong() + 1))
-        } }
+        (0 until array.length()).mapNotNull { i ->
+            runCatching {
+                array.getJSONObject(i).let {
+                    BankAccount(it.getString("id"), it.getString("name"), it.getLong("balance"),
+                        it.getLong("updatedAt"), it.optString("source", "手动录入"), it.optLong("createdAt", i.toLong() + 1))
+                }
+            }.getOrNull()
+        }
     }
     @Synchronized fun goals(): List<SavingGoal> = readArray("goals").let { array ->
-        (0 until array.length()).map { i -> array.getJSONObject(i).let { o ->
-            val ids = o.getJSONArray("accountIds")
-            SavingGoal(o.getString("id"), o.getString("title"), o.getLong("target"),
-                (0 until ids.length()).map { ids.getString(it) }.toSet(),
-                GoalMode.valueOf(o.optString("mode", "BALANCE")), o.optLong("baseline"),
-                o.optString("deadline"), o.optInt("colorIndex"), o.optLong("createdAt", i.toLong() + 1))
-        } }
+        (0 until array.length()).mapNotNull { i ->
+            runCatching {
+                array.getJSONObject(i).let { o ->
+                    val ids = o.optJSONArray("accountIds") ?: JSONArray()
+                    SavingGoal(o.getString("id"), o.getString("title"), o.getLong("target"),
+                        (0 until ids.length()).map { ids.getString(it) }.toSet(),
+                        runCatching { GoalMode.valueOf(o.optString("mode", "BALANCE")) }
+                            .getOrDefault(GoalMode.BALANCE), o.optLong("baseline"),
+                        o.optString("deadline"), o.optInt("colorIndex"), o.optLong("createdAt", i.toLong() + 1))
+                }
+            }.getOrNull()
+        }
     }
     @Synchronized fun saveAccount(account: BankAccount) {
         require(account.name.isNotBlank() && account.name.length <= 40)
@@ -116,7 +125,13 @@ class SavingsStore(context: Context) {
         writeAccounts(ids.map { byId.getValue(it) })
     }
     @Synchronized fun deleteGoal(id: String) {
-        put("goals", JSONArray().apply { goals().filterNot { it.id == id }.forEach { put(goalJson(it)) } }.toString())
+        val remaining = goals().filterNot { it.id == id }
+        val editor = prefs.edit()
+            .putString("goals", JSONArray().apply { remaining.forEach { put(goalJson(it)) } }.toString())
+        // A dangling featured id would leave the home banner falling back to the first goal,
+        // while settings still highlighted a missing entry.
+        if (prefs.getString("featured_goal", "") == id) editor.putString("featured_goal", "")
+        check(editor.commit()) { "保存失败，请检查可用空间" }
     }
     @Synchronized fun deleteAccount(id: String) {
         require(goals().none { id in it.accountIds }) { "请先在关联目标中解除该账户" }
@@ -124,18 +139,22 @@ class SavingsStore(context: Context) {
         if (candidate()?.accountId == id) clearCandidate()
         if (request()?.accountId == id) cancelCapture()
     }
-    fun request(): CaptureRequest? = prefs.getString("capture", null)?.let {
-        JSONObject(it).let { o -> CaptureRequest(o.getString("accountId"), o.getLong("expiresAt")) }
-    }
+    fun request(): CaptureRequest? = runCatching {
+        prefs.getString("capture", null)?.let {
+            JSONObject(it).let { o -> CaptureRequest(o.getString("accountId"), o.getLong("expiresAt")) }
+        }
+    }.getOrNull()
     fun startCapture(id: String) {
         require(accounts().any { it.id == id })
         check(prefs.edit().remove("candidate").putString("capture", JSONObject()
             .put("accountId", id).put("expiresAt", System.currentTimeMillis() + 120_000).toString()).commit())
     }
     fun cancelCapture() { check(prefs.edit().remove("capture").commit()) }
-    fun candidate(): BalanceCandidate? = prefs.getString("candidate", null)?.let {
-        JSONObject(it).let { o -> BalanceCandidate(o.getString("accountId"), o.getLong("balance"), o.getLong("capturedAt")) }
-    }
+    fun candidate(): BalanceCandidate? = runCatching {
+        prefs.getString("candidate", null)?.let {
+            JSONObject(it).let { o -> BalanceCandidate(o.getString("accountId"), o.getLong("balance"), o.getLong("capturedAt")) }
+        }
+    }.getOrNull()
     fun stage(candidate: BalanceCandidate) {
         check(prefs.edit().putString("candidate", JSONObject().put("accountId", candidate.accountId)
             .put("balance", candidate.balance).put("capturedAt", candidate.capturedAt).toString())
@@ -151,7 +170,8 @@ class SavingsStore(context: Context) {
         }
         check(prefs.edit().putString("accounts", accountsJson(updated).toString()).remove("candidate").commit())
     }
-    private fun readArray(key: String) = JSONArray(prefs.getString(key, "[]"))
+    private fun readArray(key: String): JSONArray = runCatching { JSONArray(prefs.getString(key, "[]")) }
+        .getOrElse { JSONArray() }
     private fun put(key: String, value: String) { check(prefs.edit().putString(key, value).commit()) { "保存失败，请检查可用空间" } }
     private fun writeAccounts(accounts: List<BankAccount>) = put("accounts", accountsJson(accounts).toString())
     private fun accountsJson(accounts: List<BankAccount>) = JSONArray().apply {

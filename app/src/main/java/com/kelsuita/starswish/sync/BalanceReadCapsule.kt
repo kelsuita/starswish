@@ -1,4 +1,4 @@
-package com.starsavings.app.sync
+package com.kelsuita.starswish.sync
 
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
@@ -6,15 +6,17 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
 import android.view.View
+import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
 import android.widget.LinearLayout
 import android.widget.TextView
-import com.starsavings.app.MainActivity
+import com.kelsuita.starswish.MainActivity
 
 /** A local accessibility overlay, not an OPPO system live notification. */
 internal class BalanceReadCapsule(private val service: AccessibilityService) {
@@ -79,7 +81,9 @@ internal class BalanceReadCapsule(private val service: AccessibilityService) {
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            y = dp(12)
+            // The overlay is positioned in screen coordinates; keep it clear of the status bar
+            // and display cutout instead of drawing under system icons.
+            y = statusBarInset() + dp(12)
             setTitle("星愿 · 余额读取完成")
         }
         capsule = content
@@ -110,4 +114,14 @@ internal class BalanceReadCapsule(private val service: AccessibilityService) {
     }
 
     private fun dp(value: Int) = (value * service.resources.displayMetrics.density + .5f).toInt()
+
+    private fun statusBarInset(): Int {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            runCatching {
+                val insets = windows.currentWindowMetrics.windowInsets
+                return insets.getInsets(WindowInsets.Type.statusBars()).top
+            }
+        }
+        return dp(24)
+    }
 }

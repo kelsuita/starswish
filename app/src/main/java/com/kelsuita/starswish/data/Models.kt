@@ -1,4 +1,4 @@
-package com.starsavings.app.data
+package com.kelsuita.starswish.data
 
 import java.math.BigDecimal
 import java.math.RoundingMode

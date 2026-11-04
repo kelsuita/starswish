@@ -1,6 +1,6 @@
-package com.starsavings.app.sync
+package com.kelsuita.starswish.sync
 
-import com.starsavings.app.data.Money
+import com.kelsuita.starswish.data.Money
 
 /** Conservative parser: an exact account name, a balance label and one unambiguous CNY amount. */
 object BalanceParser {

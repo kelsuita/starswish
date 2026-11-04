@@ -1,7 +1,7 @@
-package com.starsavings.app
+package com.kelsuita.starswish
 
-import com.starsavings.app.data.*
-import com.starsavings.app.sync.BalanceParser
+import com.kelsuita.starswish.data.*
+import com.kelsuita.starswish.sync.BalanceParser
 import org.junit.Assert.*
 import org.junit.Test
 

@@ -1,6 +1,7 @@
-package com.starsavings.app.data
+package com.kelsuita.starswish.data
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.time.LocalDate
@@ -57,11 +58,14 @@ data class BackupData(
 
         fun fromJson(text: String): BackupData {
             require(text.toByteArray(Charsets.UTF_8).size <= MAX_BYTES) { "备份文件不能超过 1 MB" }
-            return try {
-                codec.decodeFromString<BackupData>(text.removePrefix("\uFEFF")).validate()
-            } catch (error: IllegalArgumentException) {
+            val decoded = try {
+                codec.decodeFromString<BackupData>(text.removePrefix("\uFEFF"))
+            } catch (error: SerializationException) {
                 throw IllegalArgumentException("备份格式或内容无效，请选择星愿导出的 JSON 文件", error)
             }
+            // Validation messages are already written for the user; do not replace them with
+            // the generic parse error above.
+            return decoded.validate()
         }
     }
 }
