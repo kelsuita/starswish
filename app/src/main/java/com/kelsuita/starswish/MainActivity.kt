@@ -79,6 +79,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import top.yukonga.miuix.kmp.utils.PagerNavigationSpringSpec
 import top.yukonga.miuix.kmp.utils.PagerGestureNestedScrollConnection
 import top.yukonga.miuix.kmp.utils.pagerGestureOverride
@@ -213,6 +215,9 @@ private fun SavingsApp(
     val backStack = rememberNavBackStack<AppRoute>(AppRoute(0))
     val pagerState = rememberPagerState(pageCount = { 3 })
     val scope = rememberCoroutineScope()
+    // Sort commits are serialized and written off the UI thread; SharedPreferences commit()
+    // fsyncs and would otherwise drop a frame right after the drop animation.
+    val sortCommitLock = remember { Mutex() }
     var navigationJob by remember { mutableStateOf<Job?>(null) }
     val selectedTab = pagerState.targetPage
     val versionName = remember { context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty() }
@@ -311,6 +316,19 @@ private fun SavingsApp(
     }
     fun mutate(block: () -> Unit): Boolean = runCatching { block(); refresh(); true }
         .getOrElse { notify(it.message ?: "操作失败，请重试"); false }
+    // Reordering is visually complete before this runs. Persist it on a background thread so
+    // the synchronous SharedPreferences commit cannot stall the frame after the card settles.
+    fun commitSortOrder(previous: List<String>, write: () -> Unit, restore: (List<String>) -> Unit) {
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { sortCommitLock.withLock { write() } }
+            }
+            if (result.isSuccess) refresh() else {
+                restore(previous)
+                notify(result.exceptionOrNull()?.message ?: "操作失败，请重试")
+            }
+        }
+    }
     var backupBusy by remember { mutableStateOf(false) }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) scope.launch {
@@ -610,26 +628,32 @@ private fun SavingsApp(
                 }
                 6 -> {
                     val goalOrder = remember(goals) { mutableStateOf(goals.map { it.id }) }
+                    val goalDrag = remember { SortDragState() }
                     goalOrder.value.forEach { id -> key(id) {
                         val goal = goals.firstOrNull { it.id == id }
                         if (goal != null) {
                             SortCard(goal.title, Money.format(goal.target), goal.id, goalOrder,
-                                pageScrollState, viewportTop, viewportHeight,
+                                pageScrollState, viewportTop, viewportHeight, goalDrag,
                                 onCommit = { ids ->
-                                    if (!mutate { store.reorderGoals(ids) }) goalOrder.value = goals.map { it.id }
+                                    commitSortOrder(goals.map { it.id }, { store.reorderGoals(ids) }) {
+                                        goalOrder.value = it
+                                    }
                                 })
                         }
                     } }
                 }
                 7 -> {
                     val accountOrder = remember(accounts) { mutableStateOf(accounts.map { it.id }) }
+                    val accountDrag = remember { SortDragState() }
                     accountOrder.value.forEach { id -> key(id) {
                         val account = accounts.firstOrNull { it.id == id }
                         if (account != null) {
                             SortCard(account.name, Money.format(account.balance), account.id, accountOrder,
-                                pageScrollState, viewportTop, viewportHeight,
+                                pageScrollState, viewportTop, viewportHeight, accountDrag,
                                 onCommit = { ids ->
-                                    if (!mutate { store.reorderAccounts(ids) }) accountOrder.value = accounts.map { it.id }
+                                    commitSortOrder(accounts.map { it.id }, { store.reorderAccounts(ids) }) {
+                                        accountOrder.value = it
+                                    }
                                 })
                         }
                     } }
@@ -1140,65 +1164,156 @@ private fun SavingsApp(
     Icon(icon, contentDescription = null, modifier = modifier, tint = color)
 }
 
+/**
+ * Shared by every card in one sortable page. The backing list is not reordered while a drag is
+ * in progress; only these values change, and one final move is committed after the drop.
+ */
+private class SortDragState {
+    var draggedId by mutableStateOf<String?>(null)
+    var startIndex by mutableIntStateOf(-1)
+    var targetIndex by mutableIntStateOf(-1)
+    var startY by mutableFloatStateOf(0f)
+    var pointerY by mutableFloatStateOf(0f)
+    var scrollY by mutableFloatStateOf(0f)
+    var stride by mutableFloatStateOf(0f)
+    var settling by mutableStateOf(false)
+
+    val active: Boolean get() = draggedId != null
+    val distance: Float get() = pointerY - startY + scrollY
+
+    fun begin(id: String, index: Int, y: Float, stride: Float) {
+        draggedId = id
+        startIndex = index
+        targetIndex = index
+        startY = y
+        pointerY = y
+        scrollY = 0f
+        this.stride = stride
+        settling = false
+    }
+
+    // A small hysteresis band around each midpoint stops a finger resting on a threshold from
+    // swapping the same two slots back and forth.
+    fun updateTarget(lastIndex: Int) {
+        if (!active || stride <= 0f || lastIndex < 0) return
+        val slot = startIndex + distance / stride
+        val wanted = kotlin.math.round(slot).toInt().coerceIn(0, lastIndex)
+        if (wanted == targetIndex) return
+        val crossed = if (wanted > targetIndex) slot >= targetIndex + .58f
+            else slot <= targetIndex - .58f
+        if (crossed) targetIndex = wanted
+    }
+
+    fun end() { if (active) settling = true }
+
+    fun clear() {
+        draggedId = null
+        startIndex = -1
+        targetIndex = -1
+        startY = 0f
+        pointerY = 0f
+        scrollY = 0f
+        settling = false
+    }
+}
+
 @Composable private fun SortCard(
     title: String, amount: String, id: String, order: MutableState<List<String>>, scrollState: ScrollState,
-    viewportTop: Float, viewportHeight: Float, onCommit: (List<String>) -> Unit,
+    viewportTop: Float, viewportHeight: Float, drag: SortDragState, onCommit: (List<String>) -> Unit,
 ) {
     val color = MiuixTheme.colorScheme.onSurfaceVariantActions
     val density = androidx.compose.ui.platform.LocalDensity.current
     var rowHeight by remember { mutableFloatStateOf(64f) }
-    var displacement by remember { mutableFloatStateOf(0f) }
-    var dragging by remember { mutableStateOf(false) }
-    var handleTop by remember { mutableFloatStateOf(0f) }
-    var pointerY by remember { mutableFloatStateOf(0f) }
+    var handleCoordinates by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
     val index = order.value.indexOf(id)
-    // Animate the logical slot independently of scrolling so edge scrolling stays direct.
-    val animatedIndex by animateFloatAsState(index.toFloat(),
-        animationSpec = if (dragging) snap() else tween(220), label = "sortSlot")
-    val animatedDisplacement by animateFloatAsState(displacement,
-        animationSpec = if (dragging) snap() else tween(220), label = "sortDrop")
-    val lift by animateFloatAsState(if (dragging) 1f else 0f,
-        animationSpec = tween(160), label = "sortLift")
-    // Pointer callbacks can cross several slots before Compose recomposes. Read and update the
-    // shared state synchronously, or a fast drag may move from a stale index and save the wrong order.
+    val lastIndex = order.value.lastIndex
+    val stride = rowHeight + with(density) { 12.dp.toPx() }
+    val isDragged = drag.draggedId == id
+    val dragActive = isDragged && drag.active
     val currentOnCommit by rememberUpdatedState(onCommit)
-    val dragStartIds = remember { mutableStateOf(order.value) }
-    val reorder: (Int, Boolean) -> Boolean = { step, commit ->
-        val list = order.value
+    // Committing a drop replaces the order state instance. pointerInput keeps its original
+    // coroutine, so read the latest instance instead of the one captured at first composition.
+    val currentOrder by rememberUpdatedState(order)
+
+    // Other cards slide one slot while the list itself keeps its current order.
+    val shiftTarget = when {
+        !drag.active || dragActive -> 0f
+        index > drag.startIndex && index <= drag.targetIndex -> -stride
+        index >= drag.targetIndex && index < drag.startIndex -> stride
+        else -> 0f
+    }
+    val animatedShift by animateFloatAsState(shiftTarget,
+        animationSpec = if (drag.active) tween(140) else snap(), label = "sortShift")
+
+    // The dragged card follows the finger. It stops at the first or last slot, so it cannot be
+    // pulled into the empty space above or below the list.
+    val slotOffset = (drag.targetIndex - drag.startIndex) * stride
+    val followTarget = when {
+        dragActive && !drag.settling ->
+            drag.distance.coerceIn(-drag.startIndex * stride, (lastIndex - drag.startIndex) * stride)
+        dragActive -> slotOffset
+        else -> 0f
+    }
+    val follow by animateFloatAsState(followTarget,
+        animationSpec = when {
+            dragActive && !drag.settling -> snap()
+            drag.active -> tween(170)
+            else -> snap()
+        }, label = "sortFollow")
+    val lift by animateFloatAsState(if (dragActive) 1f else 0f,
+        animationSpec = tween(160), label = "sortLift")
+
+    // Animate the card onto its target slot first, then swap the list and clear the visual
+    // offsets in the same frame. The layout jump equals the offset that has just reached zero.
+    LaunchedEffect(drag.settling, dragActive) {
+        if (dragActive && drag.settling) {
+            delay(200)
+            val from = drag.startIndex
+            val to = drag.targetIndex
+            if (from in currentOrder.value.indices && to in currentOrder.value.indices && from != to) {
+                val next = currentOrder.value.toMutableList().apply { add(to, removeAt(from)) }
+                currentOrder.value = next
+                currentOnCommit(next)
+            }
+            drag.clear()
+        }
+    }
+
+    val reorder: (Int) -> Boolean = { step ->
+        val list = currentOrder.value
         val from = list.indexOf(id)
         val to = from + step
-        if (from !in list.indices || to !in list.indices) false else {
+        if (drag.active || from !in list.indices || to !in list.indices) false else {
             val next = list.toMutableList().apply { add(to, removeAt(from)) }
-            order.value = next
-            if (commit) currentOnCommit(next)
+            currentOrder.value = next
+            currentOnCommit(next)
             true
         }
     }
     val edge = with(density) { 64.dp.toPx() }
-    val direction = if (dragging && viewportHeight > 0f) when {
-        pointerY < viewportTop + edge -> -1
-        pointerY > viewportTop + viewportHeight - edge -> 1
+    val direction = if (dragActive && !drag.settling && viewportHeight > 0f) when {
+        drag.pointerY < viewportTop + edge -> -1
+        drag.pointerY > viewportTop + viewportHeight - edge -> 1
         else -> 0
     } else 0
     LaunchedEffect(direction, scrollState) {
         while (direction != 0) {
             val scrolled = scrollState.scrollBy(direction * with(density) { 10.dp.toPx() })
             if (scrolled == 0f) break
-            displacement += scrolled
-            val stride = rowHeight + with(density) { 12.dp.toPx() }
-            if (kotlin.math.abs(displacement) >= stride / 2f) {
-                if (reorder(direction, false)) displacement -= direction * stride
-                else displacement = 0f
-            }
+            drag.scrollY += scrolled
+            drag.updateTarget(currentOrder.value.lastIndex)
             delay(16)
         }
     }
-    Card(Modifier.fillMaxWidth().zIndex(if (dragging || animatedDisplacement != 0f) 1f else 0f)
+
+    Card(Modifier.fillMaxWidth().zIndex(when {
+        dragActive -> 2f
+        animatedShift != 0f -> 1f
+        else -> 0f
+    })
         .onSizeChanged { rowHeight = it.height.toFloat() }
         .graphicsLayer {
-            val stride = rowHeight + with(density) { 12.dp.toPx() }
-            translationY = if (dragging) displacement
-                else animatedDisplacement + (animatedIndex - index) * stride
+            translationY = animatedShift + follow
             scaleX = 1f + .015f * lift
             scaleY = 1f + .015f * lift
             shadowElevation = with(density) { 8.dp.toPx() } * lift
@@ -1212,37 +1327,51 @@ private fun SavingsApp(
             Text("¥ $amount", modifier = Modifier.widthIn(max = 132.dp), fontSize = 13.sp, maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-            Box(Modifier.size(48.dp).onGloballyPositioned { handleTop = it.positionInWindow().y }
+            Box(Modifier.size(48.dp).onGloballyPositioned { handleCoordinates = it }
                 .semantics {
                     contentDescription = "拖动排序 $title"
                     customActions = listOf(
-                        CustomAccessibilityAction("上移") { reorder(-1, true) },
-                        CustomAccessibilityAction("下移") { reorder(1, true) },
+                        CustomAccessibilityAction("上移") { reorder(-1) },
+                        CustomAccessibilityAction("下移") { reorder(1) },
                     )
                 }
                 .pointerInput(id) {
                     detectDragGestures(
-                        onDragStart = {
-                            displacement = 0f; pointerY = handleTop + it.y; dragging = true
-                            dragStartIds.value = order.value
+                        onDragStart = { local ->
+                            // A release animation lasts a few frames. If another gesture starts
+                            // before it ends, commit the previous drop before taking over.
+                            if (drag.settling) {
+                                val from = drag.startIndex
+                                val to = drag.targetIndex
+                                if (from in currentOrder.value.indices &&
+                                    to in currentOrder.value.indices && from != to) {
+                                    val next = currentOrder.value.toMutableList().apply { add(to, removeAt(from)) }
+                                    currentOrder.value = next
+                                    currentOnCommit(next)
+                                }
+                                drag.clear()
+                            }
+                            val from = currentOrder.value.indexOf(id)
+                            if (from >= 0) {
+                                val start = handleCoordinates?.takeIf { it.isAttached }
+                                    ?.localToWindow(local)?.y ?: 0f
+                                drag.begin(id, from, start, rowHeight + with(density) { 12.dp.toPx() })
+                            }
                         },
                         onDragEnd = {
-                            displacement = 0f; dragging = false
-                            if (order.value != dragStartIds.value) currentOnCommit(order.value)
+                            if (drag.draggedId == id) drag.end()
                         },
                         onDragCancel = {
-                            displacement = 0f; dragging = false; order.value = dragStartIds.value
+                            if (drag.draggedId == id) drag.clear()
                         },
                     ) { change, dragAmount ->
                         change.consume()
-                        pointerY = handleTop + change.position.y
-                        displacement += dragAmount.y
-                        val stride = rowHeight + with(density) { 12.dp.toPx() }
-                        if (kotlin.math.abs(displacement) >= stride / 2f) {
-                            val step = if (displacement > 0f) 1 else -1
-                            if (reorder(step, false)) displacement -= step * stride
-                            else displacement = 0f
-                        }
+                        // The handle sits inside the translated card, so read the real pointer
+                        // position in window coordinates instead of accumulating moved layout.
+                        val windowY = handleCoordinates?.takeIf { it.isAttached }
+                            ?.localToWindow(change.position)?.y ?: (drag.pointerY + dragAmount.y)
+                        drag.pointerY = windowY
+                        drag.updateTarget(currentOrder.value.lastIndex)
                     }
                 }, contentAlignment = Alignment.Center) {
                 Canvas(Modifier.size(22.dp)) {
