@@ -609,32 +609,30 @@ private fun SavingsApp(
                     Note("仅支持人民币。余额来自记账数据或手动填写，与银行实际余额可能有差异。")
                 }
                 6 -> {
-                    var goalOrder by remember(goals) { mutableStateOf(goals.map { it.id }) }
-                    goalOrder.forEach { id ->
+                    val goalOrder = remember(goals) { mutableStateOf(goals.map { it.id }) }
+                    goalOrder.value.forEach { id -> key(id) {
                         val goal = goals.firstOrNull { it.id == id }
-                        if (goal != null) key(id) {
+                        if (goal != null) {
                             SortCard(goal.title, Money.format(goal.target), goal.id, goalOrder,
                                 pageScrollState, viewportTop, viewportHeight,
-                                onMove = { goalOrder = it },
                                 onCommit = { ids ->
-                                    if (!mutate { store.reorderGoals(ids) }) goalOrder = goals.map { it.id }
+                                    if (!mutate { store.reorderGoals(ids) }) goalOrder.value = goals.map { it.id }
                                 })
                         }
-                    }
+                    } }
                 }
                 7 -> {
-                    var accountOrder by remember(accounts) { mutableStateOf(accounts.map { it.id }) }
-                    accountOrder.forEach { id ->
+                    val accountOrder = remember(accounts) { mutableStateOf(accounts.map { it.id }) }
+                    accountOrder.value.forEach { id -> key(id) {
                         val account = accounts.firstOrNull { it.id == id }
-                        if (account != null) key(id) {
+                        if (account != null) {
                             SortCard(account.name, Money.format(account.balance), account.id, accountOrder,
                                 pageScrollState, viewportTop, viewportHeight,
-                                onMove = { accountOrder = it },
                                 onCommit = { ids ->
-                                    if (!mutate { store.reorderAccounts(ids) }) accountOrder = accounts.map { it.id }
+                                    if (!mutate { store.reorderAccounts(ids) }) accountOrder.value = accounts.map { it.id }
                                 })
                         }
-                    }
+                    } }
                 }
                 2 -> {
                     SmallTitle(text = "外观", textColor = accent,
@@ -1143,8 +1141,8 @@ private fun SavingsApp(
 }
 
 @Composable private fun SortCard(
-    title: String, amount: String, id: String, ids: List<String>, scrollState: ScrollState, viewportTop: Float,
-    viewportHeight: Float, onMove: (List<String>) -> Unit, onCommit: (List<String>) -> Unit,
+    title: String, amount: String, id: String, order: MutableState<List<String>>, scrollState: ScrollState,
+    viewportTop: Float, viewportHeight: Float, onCommit: (List<String>) -> Unit,
 ) {
     val color = MiuixTheme.colorScheme.onSurfaceVariantActions
     val density = androidx.compose.ui.platform.LocalDensity.current
@@ -1153,7 +1151,7 @@ private fun SavingsApp(
     var dragging by remember { mutableStateOf(false) }
     var handleTop by remember { mutableFloatStateOf(0f) }
     var pointerY by remember { mutableFloatStateOf(0f) }
-    val index = ids.indexOf(id)
+    val index = order.value.indexOf(id)
     // Animate the logical slot independently of scrolling so edge scrolling stays direct.
     val animatedIndex by animateFloatAsState(index.toFloat(),
         animationSpec = if (dragging) snap() else tween(220), label = "sortSlot")
@@ -1161,18 +1159,17 @@ private fun SavingsApp(
         animationSpec = if (dragging) snap() else tween(220), label = "sortDrop")
     val lift by animateFloatAsState(if (dragging) 1f else 0f,
         animationSpec = tween(160), label = "sortLift")
-    // Recomposition delivers the latest order while the pointer callback keeps its first capture.
-    val currentIds by rememberUpdatedState(ids)
-    val currentOnMove by rememberUpdatedState(onMove)
+    // Pointer callbacks can cross several slots before Compose recomposes. Read and update the
+    // shared state synchronously, or a fast drag may move from a stale index and save the wrong order.
     val currentOnCommit by rememberUpdatedState(onCommit)
-    val dragStartIds = remember { mutableStateOf(ids) }
+    val dragStartIds = remember { mutableStateOf(order.value) }
     val reorder: (Int, Boolean) -> Boolean = { step, commit ->
-        val list = currentIds
+        val list = order.value
         val from = list.indexOf(id)
         val to = from + step
         if (from !in list.indices || to !in list.indices) false else {
             val next = list.toMutableList().apply { add(to, removeAt(from)) }
-            currentOnMove(next)
+            order.value = next
             if (commit) currentOnCommit(next)
             true
         }
@@ -1227,13 +1224,15 @@ private fun SavingsApp(
                     detectDragGestures(
                         onDragStart = {
                             displacement = 0f; pointerY = handleTop + it.y; dragging = true
-                            dragStartIds.value = currentIds
+                            dragStartIds.value = order.value
                         },
                         onDragEnd = {
                             displacement = 0f; dragging = false
-                            if (currentIds != dragStartIds.value) currentOnCommit(currentIds)
+                            if (order.value != dragStartIds.value) currentOnCommit(order.value)
                         },
-                        onDragCancel = { displacement = 0f; dragging = false },
+                        onDragCancel = {
+                            displacement = 0f; dragging = false; order.value = dragStartIds.value
+                        },
                     ) { change, dragAmount ->
                         change.consume()
                         pointerY = handleTop + change.position.y

@@ -18,8 +18,8 @@ android {
         applicationId = "com.kelsuita.starswish"
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.3.9"
+        versionCode = 7
+        versionName = "1.3.9.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     splits {
