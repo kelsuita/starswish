@@ -17,6 +17,7 @@ import android.view.animation.DecelerateInterpolator
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.kelsuita.starswish.MainActivity
+import com.kelsuita.starswish.data.tr
 
 /** A local accessibility overlay, not an OPPO system live notification. */
 internal class BalanceReadCapsule(private val service: AccessibilityService) {
@@ -38,7 +39,7 @@ internal class BalanceReadCapsule(private val service: AccessibilityService) {
             }
             elevation = dp(10).toFloat()
             isFocusable = true
-            contentDescription = "星愿，已读取，请返回星愿确认余额。点按打开账户确认页"
+            contentDescription = tr("星愿，已读取，请返回星愿确认余额。点按打开账户确认页")
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
         content.addView(TextView(service).apply {
@@ -50,7 +51,7 @@ internal class BalanceReadCapsule(private val service: AccessibilityService) {
         content.addView(LinearLayout(service).apply {
             orientation = LinearLayout.VERTICAL
             addView(TextView(service).apply {
-                text = "已读取，请返回星愿"
+                text = tr("已读取，请返回星愿")
                 textSize = 15f
                 setTextColor(Color.WHITE)
                 setTypeface(typeface, Typeface.BOLD)
@@ -58,7 +59,7 @@ internal class BalanceReadCapsule(private val service: AccessibilityService) {
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             })
             addView(TextView(service).apply {
-                text = "点按核对并确认余额  ›"
+                text = tr("点按核对并确认余额  ›")
                 textSize = 12f
                 setTextColor(Color.rgb(185, 189, 201))
                 setPadding(0, dp(3), 0, 0)
@@ -84,7 +85,7 @@ internal class BalanceReadCapsule(private val service: AccessibilityService) {
             // The overlay is positioned in screen coordinates; keep it clear of the status bar
             // and display cutout instead of drawing under system icons.
             y = statusBarInset() + dp(12)
-            setTitle("星愿 · 余额读取完成")
+            setTitle(tr("星愿 · 余额读取完成"))
         }
         capsule = content
         if (runCatching { windows.addView(content, params) }.isFailure) {

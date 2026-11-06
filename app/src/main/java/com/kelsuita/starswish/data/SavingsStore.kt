@@ -11,6 +11,13 @@ class SavingsStore(context: Context) {
     fun hitokoto(): String? = prefs.getString("hitokoto", null)
     fun saveHitokoto(value: String) = put("hitokoto", value)
 
+    /** UI language index: 0 simplified Chinese, 1 traditional Chinese, 2 English. */
+    fun language(): Int = prefs.getInt("language", 0).coerceIn(0, 2)
+    fun saveLanguage(value: Int) {
+        require(value in 0..2)
+        check(prefs.edit().putInt("language", value).commit()) { tr("语言设置保存失败") }
+    }
+
     fun appearance(): Appearance = Appearance(
         prefs.getInt("theme_mode", 0).coerceIn(0, 2),
         prefs.getInt("accent_choice", if (prefs.contains("accent_index"))
@@ -34,7 +41,7 @@ class SavingsStore(context: Context) {
             .putInt("palette_style", value.paletteStyle)
             .putInt("color_spec", value.colorSpec)
             .putBoolean("blur_enabled", value.blurEnabled)
-            .putBoolean("pure_black_background", value.pureBlackBackground).commit()) { "外观设置保存失败" }
+            .putBoolean("pure_black_background", value.pureBlackBackground).commit()) { tr("外观设置保存失败") }
     }
 
     @Synchronized fun exportBackup(): BackupData {
@@ -64,7 +71,7 @@ class SavingsStore(context: Context) {
             .putBoolean("pure_black_background", value.pureBlackBackground)
             .remove("capture").remove("candidate")
         if (backup.hitokoto == null) editor.remove("hitokoto") else editor.putString("hitokoto", backup.hitokoto)
-        check(editor.commit()) { "备份导入保存失败，请检查可用空间" }
+        check(editor.commit()) { tr("备份导入保存失败，请检查可用空间") }
     }
 
     @Synchronized fun accounts(): List<BankAccount> = readArray("accounts").let { array ->
@@ -95,8 +102,8 @@ class SavingsStore(context: Context) {
         require(account.name.isNotBlank() && account.name.length <= 40)
         require(account.balance in -Money.MAX_CENTS..Money.MAX_CENTS)
         val existing = accounts()
-        require(existing.none { it.id != account.id && it.name == account.name }) { "账户名称已存在" }
-        require(existing.any { it.id == account.id } || existing.size < 50) { "最多添加 50 个账户" }
+        require(existing.none { it.id != account.id && it.name == account.name }) { tr("账户名称已存在") }
+        require(existing.any { it.id == account.id } || existing.size < 50) { tr("最多添加 50 个账户") }
         writeAccounts(existing.map { if (it.id == account.id) account.copy(createdAt = it.createdAt) else it }
             .let { if (existing.any { it.id == account.id }) it else it + account.copy(createdAt = System.currentTimeMillis()) })
     }
@@ -105,7 +112,7 @@ class SavingsStore(context: Context) {
         require(goal.target in 1..Money.MAX_CENTS && goal.accountIds.isNotEmpty())
         require(goal.accountIds.all { id -> accounts().any { it.id == id } })
         val existing = goals()
-        require(existing.any { it.id == goal.id } || existing.size < 100) { "最多添加 100 个目标" }
+        require(existing.any { it.id == goal.id } || existing.size < 100) { tr("最多添加 100 个目标") }
         put("goals", JSONArray().apply {
             existing.map { if (it.id == goal.id) goal.copy(createdAt = it.createdAt) else it }
                 .let { if (existing.any { it.id == goal.id }) it else it + goal.copy(createdAt = System.currentTimeMillis()) }
@@ -131,10 +138,10 @@ class SavingsStore(context: Context) {
         // A dangling featured id would leave the home banner falling back to the first goal,
         // while settings still highlighted a missing entry.
         if (prefs.getString("featured_goal", "") == id) editor.putString("featured_goal", "")
-        check(editor.commit()) { "保存失败，请检查可用空间" }
+        check(editor.commit()) { tr("保存失败，请检查可用空间") }
     }
     @Synchronized fun deleteAccount(id: String) {
-        require(goals().none { id in it.accountIds }) { "请先在关联目标中解除该账户" }
+        require(goals().none { id in it.accountIds }) { tr("请先在关联目标中解除该账户") }
         writeAccounts(accounts().filterNot { it.id == id })
         if (candidate()?.accountId == id) clearCandidate()
         if (request()?.accountId == id) cancelCapture()
@@ -163,7 +170,7 @@ class SavingsStore(context: Context) {
     fun clearCandidate() { check(prefs.edit().remove("candidate").commit()) }
     @Synchronized fun acceptCandidate() {
         val candidate = candidate() ?: return
-        val account = accounts().firstOrNull { it.id == candidate.accountId } ?: error("该账户已删除")
+        val account = accounts().firstOrNull { it.id == candidate.accountId } ?: error(tr("该账户已删除"))
         val updated = accounts().map {
             if (it.id == account.id) it.copy(balance = candidate.balance, updatedAt = candidate.capturedAt,
                 source = "小星页面识别 · 已确认") else it
@@ -172,7 +179,7 @@ class SavingsStore(context: Context) {
     }
     private fun readArray(key: String): JSONArray = runCatching { JSONArray(prefs.getString(key, "[]")) }
         .getOrElse { JSONArray() }
-    private fun put(key: String, value: String) { check(prefs.edit().putString(key, value).commit()) { "保存失败，请检查可用空间" } }
+    private fun put(key: String, value: String) { check(prefs.edit().putString(key, value).commit()) { tr("保存失败，请检查可用空间") } }
     private fun writeAccounts(accounts: List<BankAccount>) = put("accounts", accountsJson(accounts).toString())
     private fun accountsJson(accounts: List<BankAccount>) = JSONArray().apply {
         accounts.forEach { put(JSONObject().put("id", it.id).put("name", it.name)
