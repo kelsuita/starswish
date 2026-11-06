@@ -435,16 +435,27 @@ private fun SavingsApp(
             }
         }
     }
-    NavDisplay(
-        backStack = backStack,
+    BoxWithConstraints(
         // Route transitions translate/scale the outgoing entry. In the wide shell the rail is a
         // sibling before NavDisplay, so an unclipped outgoing entry would paint over the rail and
         // leave a ghost there until the next full redraw.
         modifier = Modifier.weight(1f).fillMaxHeight().clipToBounds(),
+    ) {
+    // The pane width is measured (rather than derived from the rail constants) so the title can
+    // line up with the centred content column even when system insets widen the rail.
+    val paneWidth = maxWidth
+    NavDisplay(
+        backStack = backStack,
+        modifier = Modifier.fillMaxSize(),
         onBack = { backStack.removeLastOrNull() },
     ) {
       entry<AppRoute> { route ->
         val page = if (route.page >= 3) route.page else selectedTab
+        // Wide layouts keep the content in a centred 880dp column. Give the bar title the same
+        // gutter so the large title starts on the column instead of floating at the rail edge.
+        val barTitlePadding = if (wideLayout)
+            ((paneWidth - 880.dp) * 0.5f).coerceAtLeast(0.dp) + 32.dp
+        else TopAppBarDefaults.TitlePadding
         val blurActive = appearance.blurEnabled && android.os.Build.VERSION.SDK_INT >= 33 && isRuntimeShaderSupported()
         // A LayerBackdrop has one recording owner. Pager neighbours must not overwrite it.
         val backdrops = List(if (route.page < 3) 3 else 1) {
@@ -494,12 +505,12 @@ private fun SavingsApp(
                 .then(if (backdrop != null) Modifier.textureBlur(backdrop, RectangleShape, BlurDefaults.BlurRadius,
                     colors = BlurDefaults.blurColors(blendColors = listOf(BlendColorEntry(pageBackground.copy(alpha = .8f))))) else Modifier)
                 .background(if (backdrop != null) Color.Transparent else pageBackground)) {
-                AdaptiveTopAppBar(
-                    wide = wideLayout,
+                TopAppBar(
                     title = when (displayedPage) { 0 -> "星愿"; 1 -> "账户"; 2 -> "设置"; 4 -> "主题设置"; 5 -> "导入与导出"; 6 -> "目标排序"; 7 -> "账户排序"; else -> "关于" },
                     subtitle = "",
                     color = barColor,
                     scrollBehavior = contentScrollBehavior,
+                    titlePadding = barTitlePadding,
                     bottomContent = {
                         if (displayedPage == 1 || displayedPage == 2) {
                             // Unlike TopAppBar.subtitle, this caption does not reappear below the small title.
@@ -876,6 +887,7 @@ private fun SavingsApp(
       }
     }
     }
+    }
     DialogHost(importVisible) { finished ->
         pendingBackup?.let { backup ->
             AppDialog(
@@ -1220,32 +1232,6 @@ private fun SavingsApp(
     var mounted by remember { mutableStateOf(show) }
     LaunchedEffect(show) { if (show) mounted = true }
     if (mounted) content { mounted = false }
-}
-
-/**
- * Wide windows use the pinned small app bar so the page starts closer to the top; the large
- * collapsing title would waste most of a landscape window's height. Both variants share the
- * same slots and scroll behaviour, so switching orientation keeps the bar state hoisted.
- */
-@Composable private fun AdaptiveTopAppBar(
-    wide: Boolean,
-    title: String,
-    subtitle: String = "",
-    color: Color,
-    scrollBehavior: ScrollBehavior,
-    bottomContent: @Composable () -> Unit = {},
-    actions: @Composable RowScope.() -> Unit = {},
-    navigationIcon: @Composable () -> Unit = {},
-) {
-    if (wide) {
-        SmallTopAppBar(title = title, subtitle = subtitle, color = color,
-            scrollBehavior = scrollBehavior, bottomContent = bottomContent,
-            actions = actions, navigationIcon = navigationIcon)
-    } else {
-        TopAppBar(title = title, subtitle = subtitle, color = color,
-            scrollBehavior = scrollBehavior, bottomContent = bottomContent,
-            actions = actions, navigationIcon = navigationIcon)
-    }
 }
 
 @Composable private fun AppDialog(
