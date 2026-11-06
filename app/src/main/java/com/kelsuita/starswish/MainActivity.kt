@@ -1,7 +1,10 @@
 package com.kelsuita.starswish
 
+import android.annotation.SuppressLint
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
@@ -114,6 +117,7 @@ import java.time.temporal.ChronoUnit
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import org.json.JSONObject
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.LocalContentColor
@@ -124,6 +128,22 @@ import top.yukonga.miuix.kmp.theme.ThemePaletteStyle
 
 private val Blue = Color(0xFF3975F6)
 private val AccentColors = listOf(Blue, Color(0xFF2EAA8C), Color(0xFFB6573B), Color(0xFF8068C8))
+// Miuix only applies the palette style and colour spec when Monet is given a key colour; without
+// one it returns the platform palette as-is. Read the wallpaper seed the platform palette is built
+// from so those two settings work for Monet too. Null means the device has no wallpaper palette
+// (Android 8-11), where Monet falls back to the stock Miuix colours.
+@SuppressLint("InlinedApi")
+private fun monetSeedColor(context: Context): Color? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) runCatching {
+        val json = Settings.Secure.getString(context.contentResolver, "theme_customization_overlay_packages")
+        val hex = json?.let { JSONObject(it).optString("android.theme.customization.system_palette") }.orEmpty()
+        if (hex.isNotBlank()) {
+            return Color(android.graphics.Color.parseColor(if (hex.startsWith("#")) hex else "#$hex"))
+        }
+    }
+    return Color(context.resources.getColor(android.R.color.system_accent1_500, context.theme))
+}
 @Serializable
 private data class AppRoute(val page: Int) : NavKey
 private val NavIcons = listOf(MiuixIcons.Home, MiuixIcons.BankCards, MiuixIcons.Settings)
@@ -157,8 +177,11 @@ class MainActivity : ComponentActivity() {
                 2 -> true
                 else -> isSystemInDarkTheme()
             }
-            // Null selects the platform wallpaper palette only for the Monet option.
-            val seed = AccentColors.getOrNull(appearance.accentIndex - 2)
+            // Fixed accents derive their palette from the chosen seed. Monet derives it from the
+            // wallpaper seed so the palette style and colour spec selections apply there as well;
+            // without a seed Miuix would hand back the platform palette and ignore both settings.
+            val monetSeed = remember { monetSeedColor(this@MainActivity) }
+            val seed = if (appearance.accentIndex == 1) monetSeed else AccentColors.getOrNull(appearance.accentIndex - 2)
             val paletteStyle = ThemePaletteStyle.entries[appearance.paletteStyle]
             val colorSpec = ThemeColorSpec.entries[appearance.colorSpec]
             val controller = remember(seed, dark, paletteStyle, colorSpec, appearance.accentIndex) {
@@ -182,7 +205,7 @@ class MainActivity : ComponentActivity() {
             }
             MiuixTheme(controller = controller) {
                 CompositionLocalProvider(LocalContentColor provides MiuixTheme.colorScheme.onBackground) {
-                    SavingsApp(store, revision, { revision++ }, appearance, dark, ::isReaderEnabled, ::openReaderSettings, ::openXiaoxing,
+                    SavingsApp(store, revision, { revision++ }, appearance, dark, monetSeed, ::isReaderEnabled, ::openReaderSettings, ::openXiaoxing,
                         confirmBalanceRequested, { confirmBalanceRequested = false; intent.action = null })
                 }
             }
@@ -210,6 +233,7 @@ private fun SavingsApp(
     store: SavingsStore, revision: Int, refresh: () -> Unit,
     appearance: Appearance,
     dark: Boolean,
+    monetSeed: Color?,
     readerEnabled: () -> Boolean, openReaderSettings: () -> Unit, openXiaoxing: () -> Boolean,
     confirmBalanceRequested: Boolean, onConfirmationOpened: () -> Unit,
 ) {
@@ -812,11 +836,11 @@ private fun SavingsApp(
                             selectedIndex = appearance.accentIndex,
                             onSelectedIndexChange = { value -> mutate { store.saveAppearance(appearance.copy(accentIndex = value)) } })
                         OverlayDropdownPreference(title = "调色板风格", summary = "用于推导 MIUIX 调色板的色调算法",
-                            enabled = appearance.accentIndex >= 2,
+                            enabled = appearance.accentIndex >= 2 || (appearance.accentIndex == 1 && monetSeed != null),
                             items = ThemePaletteStyle.entries.map { it.name }, selectedIndex = appearance.paletteStyle,
                             onSelectedIndexChange = { value -> mutate { store.saveAppearance(appearance.copy(paletteStyle = value)) } })
                         OverlayDropdownPreference(title = "色彩规范", summary = "Material 3 色彩规范版本",
-                            enabled = appearance.accentIndex >= 2,
+                            enabled = appearance.accentIndex >= 2 || (appearance.accentIndex == 1 && monetSeed != null),
                             items = listOf("2021", "2025"), selectedIndex = appearance.colorSpec,
                             onSelectedIndexChange = { value -> mutate { store.saveAppearance(appearance.copy(colorSpec = value)) } })
                     }
