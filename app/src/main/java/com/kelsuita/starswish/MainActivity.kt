@@ -446,7 +446,21 @@ private fun SavingsApp(
         // Route transitions translate/scale the outgoing entry. In the wide shell the rail is a
         // sibling before NavDisplay, so an unclipped outgoing entry would paint over the rail and
         // leave a ghost there until the next full redraw.
-        modifier = Modifier.weight(1f).fillMaxHeight().clipToBounds(),
+        modifier = Modifier.weight(1f).fillMaxHeight()
+            .then(
+                if (wideLayout) {
+                    // The rail already insets the start cutout (camera end when the phone is
+                    // rotated). Pad the opposite end here and consume the horizontal cutout so
+                    // TopAppBar does not inset the pane a second time and push the title off the
+                    // content column.
+                    Modifier
+                        .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.End))
+                        .consumeWindowInsets(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
+                } else {
+                    Modifier
+                },
+            )
+            .clipToBounds(),
     ) {
     // The pane width is measured (rather than derived from the rail constants) so the title can
     // line up with the centred content column even when system insets widen the rail.
