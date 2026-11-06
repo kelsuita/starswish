@@ -447,6 +447,10 @@ private fun SavingsApp(
         // sibling before NavDisplay, so an unclipped outgoing entry would paint over the rail and
         // leave a ghost there until the next full redraw.
         modifier = Modifier.weight(1f).fillMaxHeight()
+            // The cutout padding added below is inside this box, and nothing else paints it, so
+            // the window background would show through as a strip of a different shade next to
+            // the page background (obvious in the pure black dark theme).
+            .background(pageBackground)
             .then(
                 if (wideLayout) {
                     // The rail already insets the start cutout (camera end when the phone is
