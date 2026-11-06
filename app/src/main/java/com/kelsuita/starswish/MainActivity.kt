@@ -228,6 +228,11 @@ private fun SavingsApp(
     val configuration = LocalConfiguration.current
     val wideLayout = configuration.screenWidthDp >= 600
     val expandedNavigation = configuration.screenWidthDp >= 1000
+    // Use the expandable rail overload so Miuix supplies its own toggle button. The width only
+    // supplies the initial state; afterwards the user owns it and it survives rotation.
+    val railState = rememberNavigationRailState(
+        initialValue = if (expandedNavigation) NavigationRailValue.Expanded else NavigationRailValue.Collapsed,
+    )
     val goalGrid = configuration.screenWidthDp >= 840
     val accountGrid = configuration.screenWidthDp >= 1000
     val layoutDirection = LocalLayoutDirection.current
@@ -421,9 +426,11 @@ private fun SavingsApp(
     Row(Modifier.fillMaxSize()) {
     if (wideLayout) {
         NavigationRail(
-            expanded = expandedNavigation,
+            state = railState,
             color = pageBackground,
             showDivider = true,
+            expandContentDescription = "展开导航栏",
+            collapseContentDescription = "收起导航栏",
         ) {
             listOf("首页" to NavIcons[0], "账户" to NavIcons[1], "设置" to NavIcons[2]).forEachIndexed { index, item ->
                 NavigationRailItem(
