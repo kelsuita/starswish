@@ -11,11 +11,17 @@ class SavingsStore(context: Context) {
     fun hitokoto(): String? = prefs.getString("hitokoto", null)
     fun saveHitokoto(value: String) = put("hitokoto", value)
 
-    /** UI language index: 0 simplified Chinese, 1 traditional Chinese, 2 English. */
-    fun language(): Int = prefs.getInt("language", 0).coerceIn(0, 2)
+    /** UI language index: 0 follows the system, 1 simplified Chinese, 2 traditional Chinese, 3 English. */
+    fun language(): Int {
+        if (prefs.contains("language_v2")) return prefs.getInt("language_v2", 0).coerceIn(0, 3)
+        // Builds before the follow-system option stored 0..2 directly; shift those by one so an
+        // explicit choice survives the update instead of silently becoming "follow system".
+        val legacy = if (prefs.contains("language")) prefs.getInt("language", 1) else -1
+        return if (legacy in 0..2) legacy + 1 else 0
+    }
     fun saveLanguage(value: Int) {
-        require(value in 0..2)
-        check(prefs.edit().putInt("language", value).commit()) { tr("语言设置保存失败") }
+        require(value in 0..3)
+        check(prefs.edit().putInt("language_v2", value).commit()) { tr("语言设置保存失败") }
     }
 
     fun appearance(): Appearance = Appearance(

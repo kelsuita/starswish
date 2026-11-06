@@ -172,7 +172,7 @@ class MainActivity : ComponentActivity() {
         val store = SavingsStore(this)
         // The language lives outside the appearance snapshot: every screen reads it through
         // Languages.tr while composing, so updating it here repaints without a restart.
-        Languages.current = AppLanguage.entries[store.language()]
+        Languages.set(AppLanguage.entries[store.language()])
         setContent {
             val appearance = remember(revision) { store.appearance() }
             val dark = when (appearance.themeMode) {
@@ -811,12 +811,17 @@ private fun SavingsApp(
                     SmallTitle(text = tr("语言"), textColor = accent,
                         insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
                     Card(Modifier.fillMaxWidth()) {
-                        OverlayDropdownPreference(title = tr("语言"), summary = tr("选择应用的显示语言"),
-                            items = AppLanguage.entries.map { it.nativeName },
-                            selectedIndex = Languages.current.ordinal,
+                        OverlayDropdownPreference(title = tr("语言"),
+                            summary = if (Languages.choice == AppLanguage.FollowSystem)
+                                tr("跟随系统语言（%s）", Languages.current.nativeName)
+                            else tr("选择应用的显示语言"),
+                            items = AppLanguage.entries.map {
+                                if (it == AppLanguage.FollowSystem) tr("跟随系统") else it.nativeName
+                            },
+                            selectedIndex = Languages.choice.ordinal,
                             onSelectedIndexChange = { value -> mutate {
                                 store.saveLanguage(value)
-                                Languages.current = AppLanguage.entries[value]
+                                Languages.set(AppLanguage.entries[value])
                             } })
                     }
                     SmallTitle(text = tr("外观"), textColor = accent,

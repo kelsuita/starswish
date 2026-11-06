@@ -6,6 +6,8 @@ import androidx.compose.runtime.setValue
 import java.util.Locale
 
 enum class AppLanguage(val nativeName: String) {
+    /** First-launch default: use whatever language the system is set to. */
+    FollowSystem("跟随系统"),
     SimplifiedChinese("简体中文"),
     TraditionalChinese("繁體中文"),
     English("English"),
@@ -18,10 +20,42 @@ enum class AppLanguage(val nativeName: String) {
  * read it; the switch takes effect immediately without recreating the activity.
  */
 object Languages {
+    /** The stored choice, which may be [AppLanguage.FollowSystem]. */
+    var choice by mutableStateOf(AppLanguage.FollowSystem)
+        private set
+
+    /** The language actually used for lookups, with [AppLanguage.FollowSystem] already resolved. */
     var current by mutableStateOf(AppLanguage.SimplifiedChinese)
+        private set
+
+    /** Applies a stored choice on start-up and whenever the user picks a new one. */
+    fun set(value: AppLanguage) {
+        choice = value
+        current = resolve(value)
+    }
+
+    /**
+     * Maps [AppLanguage.FollowSystem] onto the system UI language. The activity has no
+     * `configChanges` for locale, so changing the system language recreates it and [set] runs
+     * again with the new locale.
+     */
+    fun resolve(value: AppLanguage): AppLanguage = when (value) {
+        AppLanguage.FollowSystem -> systemLanguage()
+        else -> value
+    }
+
+    /** Chinese systems get the matching script; every other locale falls back to English. */
+    private fun systemLanguage(): AppLanguage {
+        val locale = Locale.getDefault()
+        return when (locale.language) {
+            "zh" -> if (locale.script == "Hant" || locale.country in setOf("TW", "HK", "MO"))
+                AppLanguage.TraditionalChinese else AppLanguage.SimplifiedChinese
+            else -> AppLanguage.English
+        }
+    }
 
     fun tr(source: String): String = when (current) {
-        AppLanguage.SimplifiedChinese -> source
+        AppLanguage.SimplifiedChinese, AppLanguage.FollowSystem -> source
         AppLanguage.TraditionalChinese -> Traditional[source] ?: source
         AppLanguage.English -> English[source] ?: source
     }
@@ -112,6 +146,7 @@ private val Traditional = mapOf(
     "该账户已删除" to "該帳戶已刪除",
     "给心愿起个名字吧" to "給心願起個名字吧",
     "跟随系统" to "跟隨系統",
+    "跟随系统语言（%s）" to "跟隨系統語言（%s）",
     "更新于 %s" to "更新於 %s",
     "更新余额" to "更新餘額",
     "关联账户" to "關聯帳戶",
@@ -363,6 +398,7 @@ private val English = mapOf(
     "该账户已删除" to "This account was deleted",
     "给心愿起个名字吧" to "Give the wish a name",
     "跟随系统" to "Follow system",
+    "跟随系统语言（%s）" to "Follow the system language (%s)",
     "更新于 %s" to "Updated %s",
     "更新余额" to "Update balance",
     "关联账户" to "Linked accounts",
