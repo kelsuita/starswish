@@ -60,7 +60,9 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
@@ -220,6 +222,15 @@ private fun SavingsApp(
     val sortCommitLock = remember { Mutex() }
     var navigationJob by remember { mutableStateOf<Job?>(null) }
     val selectedTab = pagerState.targetPage
+    // Compact/medium/expanded breakpoints follow the Miuix adaptive shell: phones keep the
+    // bottom bar, landscape phones and tablets switch to a side rail, and the widest windows
+    // expand the rail. Content stays centred instead of stretching across a large window.
+    val configuration = LocalConfiguration.current
+    val wideLayout = configuration.screenWidthDp >= 600
+    val expandedNavigation = configuration.screenWidthDp >= 1000
+    val goalGrid = configuration.screenWidthDp >= 840
+    val accountGrid = configuration.screenWidthDp >= 1000
+    val layoutDirection = LocalLayoutDirection.current
     val versionName = remember { context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty() }
     var hitokoto by remember { mutableStateOf(store.hitokoto()) }
     var quoteLoading by remember { mutableStateOf(false) }
@@ -398,7 +409,40 @@ private fun SavingsApp(
     )
     val backProgress = (pagerBackState.transitionState as? NavigationEventTransitionState.InProgress)
         ?.latestEvent?.progress ?: 0f
-    NavDisplay(backStack = backStack, onBack = { backStack.removeLastOrNull() }) {
+    // Secondary pages keep the rail visible and map back to the tab that owns them, so the
+    // window-size change does not introduce a second navigation state. Tab destinations all
+    // live in the pager under AppRoute(0), so only a pushed secondary route overrides the tab.
+    val topRoute = (backStack.lastOrNull() as? AppRoute)?.page ?: 0
+    val railPage = if (backStack.size > 1 && topRoute >= 3) when (topRoute) {
+        6 -> 0
+        7 -> 1
+        else -> 2
+    } else selectedTab
+    Row(Modifier.fillMaxSize()) {
+    if (wideLayout) {
+        NavigationRail(
+            expanded = expandedNavigation,
+            color = pageBackground,
+            showDivider = true,
+        ) {
+            listOf("首页" to NavIcons[0], "账户" to NavIcons[1], "设置" to NavIcons[2]).forEachIndexed { index, item ->
+                NavigationRailItem(
+                    selected = railPage == index,
+                    onClick = { navigate(index) },
+                    icon = item.second,
+                    label = item.first,
+                )
+            }
+        }
+    }
+    NavDisplay(
+        backStack = backStack,
+        // Route transitions translate/scale the outgoing entry. In the wide shell the rail is a
+        // sibling before NavDisplay, so an unclipped outgoing entry would paint over the rail and
+        // leave a ghost there until the next full redraw.
+        modifier = Modifier.weight(1f).fillMaxHeight().clipToBounds(),
+        onBack = { backStack.removeLastOrNull() },
+    ) {
       entry<AppRoute> { route ->
         val page = if (route.page >= 3) route.page else selectedTab
         val blurActive = appearance.blurEnabled && android.os.Build.VERSION.SDK_INT >= 33 && isRuntimeShaderSupported()
@@ -411,14 +455,14 @@ private fun SavingsApp(
         }
         // The bottom bar samples the pager's stable parent, not an individual page.
         // A page's layer can be detached during tab animation or a rapid second tap.
-        val bottomBackdrop = if (blurActive && route.page < 3) rememberLayerBackdrop {
+        val bottomBackdrop = if (!wideLayout && blurActive && route.page < 3) rememberLayerBackdrop {
             drawRect(pageBackground)
             drawContent()
         } else null
         val barColor = if (blurActive) Color.Transparent else pageBackground
         Scaffold(
           bottomBar = {
-            if (page < 3) {
+            if (!wideLayout && page < 3) {
                 Box(Modifier.fillMaxWidth()
                     .then(if (bottomBackdrop != null) Modifier.textureBlur(bottomBackdrop, RectangleShape, BlurDefaults.BlurRadius,
                         colors = BlurDefaults.blurColors(blendColors = listOf(BlendColorEntry(pageBackground.copy(alpha = .8f))))) else Modifier)
@@ -450,27 +494,38 @@ private fun SavingsApp(
                 .then(if (backdrop != null) Modifier.textureBlur(backdrop, RectangleShape, BlurDefaults.BlurRadius,
                     colors = BlurDefaults.blurColors(blendColors = listOf(BlendColorEntry(pageBackground.copy(alpha = .8f))))) else Modifier)
                 .background(if (backdrop != null) Color.Transparent else pageBackground)) {
-                TopAppBar(title = when (displayedPage) { 0 -> "星愿"; 1 -> "账户"; 2 -> "设置"; 4 -> "主题设置"; 5 -> "导入与导出"; 6 -> "目标排序"; 7 -> "账户排序"; else -> "关于" },
-                subtitle = "",
-                color = barColor, scrollBehavior = contentScrollBehavior,
-                bottomContent = {
-                    if (displayedPage == 1 || displayedPage == 2) {
-                        // Unlike TopAppBar.subtitle, this caption does not reappear below the small title.
-                        Box(Modifier.layout { measurable, constraints ->
-                            val placeable = measurable.measure(constraints)
-                            val visibleHeight = (placeable.height *
-                                (1f - contentScrollBehavior.state.collapsedFraction).coerceIn(0f, 1f)).toInt()
-                            layout(placeable.width, visibleHeight) { placeable.placeRelative(0, 0) }
-                        }.clipToBounds()) {
-                            Text(if (displayedPage == 1) "绑定小星记账中的人民币储蓄账户。"
-                                else if (quoteLoading && quoteRetry == 0) "一言加载中…" else hitokoto ?: "一言加载中…",
-                                modifier = Modifier.fillMaxWidth()
-                                    .then(if (displayedPage == 2) Modifier.clickable(enabled = !quoteLoading) { quoteRetry++ } else Modifier)
-                                    .padding(start = TopAppBarDefaults.TitlePadding, end = TopAppBarDefaults.TitlePadding, bottom = 8.dp),
-                                fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                AdaptiveTopAppBar(
+                    wide = wideLayout,
+                    title = when (displayedPage) { 0 -> "星愿"; 1 -> "账户"; 2 -> "设置"; 4 -> "主题设置"; 5 -> "导入与导出"; 6 -> "目标排序"; 7 -> "账户排序"; else -> "关于" },
+                    subtitle = "",
+                    color = barColor,
+                    scrollBehavior = contentScrollBehavior,
+                    bottomContent = {
+                        if (displayedPage == 1 || displayedPage == 2) {
+                            // Unlike TopAppBar.subtitle, this caption does not reappear below the small title.
+                            // On wide windows the bar spans the whole pane, so centre the caption on the
+                            // same 880dp column as the cards to keep its left edge aligned with them.
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+                                Box(Modifier.then(if (wideLayout) Modifier.widthIn(max = 880.dp) else Modifier)
+                                    .fillMaxWidth()) {
+                                    Box(Modifier.layout { measurable, constraints ->
+                                        val placeable = measurable.measure(constraints)
+                                        val visibleHeight = (placeable.height *
+                                            (1f - contentScrollBehavior.state.collapsedFraction).coerceIn(0f, 1f)).toInt()
+                                        layout(placeable.width, visibleHeight) { placeable.placeRelative(0, 0) }
+                                    }.clipToBounds()) {
+                                        val side = if (wideLayout) 32.dp else TopAppBarDefaults.TitlePadding
+                                        Text(if (displayedPage == 1) "绑定小星记账中的人民币储蓄账户。"
+                                            else if (quoteLoading && quoteRetry == 0) "一言加载中…" else hitokoto ?: "一言加载中…",
+                                            modifier = Modifier.fillMaxWidth()
+                                                .then(if (displayedPage == 2) Modifier.clickable(enabled = !quoteLoading) { quoteRetry++ } else Modifier)
+                                                .padding(start = side, end = side, bottom = 8.dp),
+                                            fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                                    }
+                                }
+                            }
                         }
-                    }
-                },
+                    },
                 actions = {
                     if (displayedPage == 6 || displayedPage == 7) {
                         val sortingGoals = displayedPage == 6
@@ -522,12 +577,17 @@ private fun SavingsApp(
             viewportHeight = it.size.height.toFloat()
         }
             .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)) {
-        Column(Modifier.fillMaxSize()
+        Column(Modifier.fillMaxHeight()
+            .then(if (wideLayout) Modifier.widthIn(max = 880.dp) else Modifier)
+            .fillMaxWidth()
+            .align(Alignment.TopCenter)
             .background(pageBackground)
             .overScrollVertical()
             .nestedScroll(contentScrollBehavior.nestedScrollConnection)
             .verticalScroll(pageScrollState)
-            .padding(start = 16.dp, end = 16.dp, top = pagePadding.calculateTopPadding(),
+            .padding(start = if (wideLayout) 32.dp else maxOf(16.dp, pagePadding.calculateStartPadding(layoutDirection)),
+                end = maxOf(if (wideLayout) 32.dp else 16.dp, pagePadding.calculateEndPadding(layoutDirection)),
+                top = pagePadding.calculateTopPadding(),
                 bottom = maxOf(padding.calculateBottomPadding(), pagePadding.calculateBottomPadding())),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Spacer(Modifier.height(2.dp))
@@ -547,11 +607,23 @@ private fun SavingsApp(
                             editingGoalId = null; goalEditor = true
                         }
                     }
-                    goals.forEach { goal ->
+                    val goalCard: @Composable (SavingGoal) -> Unit = { goal ->
                         GoalCard(goal, accounts,
                             onEdit = { editingGoalId = goal.id; goalEditor = true },
                             onDelete = { deletingGoal = goal; deletingGoalVisible = true },
                             onSync = { navigate(1) }, compact = appearance.compactList)
+                    }
+                    if (goalGrid) {
+                        // Wider windows use two card columns; the sort page remains a single
+                        // column because its drag maths is slot based.
+                        goals.chunked(2).forEach { pair ->
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                pair.forEach { goal -> Box(Modifier.weight(1f)) { goalCard(goal) } }
+                                if (pair.size == 1) Spacer(Modifier.weight(1f))
+                            }
+                        }
+                    } else {
+                        goals.forEach { goalCard(it) }
                     }
                     Note("目标之间独立计算；同一账户可关联多个目标，不代表资金已分开存放。")
                 }
@@ -603,7 +675,7 @@ private fun SavingsApp(
                     if (accounts.isEmpty()) EmptyCard("bank", "先连接一份积累", "添加与小星记账完全相同的账户名称，\n就能为攒钱目标提供余额。", "添加第一个账户") {
                         editingAccountId = null; accountEditor = true
                     }
-                    accounts.forEach { account ->
+                    val accountCard: @Composable (BankAccount) -> Unit = { account ->
                         Panel {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 IconTile("bank", accent)
@@ -623,6 +695,16 @@ private fun SavingsApp(
                                 Button(onClick = { deletingAccount = account; deletingAccountVisible = true }) { Text("删除", fontSize = 13.sp) }
                             }
                         }
+                    }
+                    if (accountGrid) {
+                        accounts.chunked(2).forEach { pair ->
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                pair.forEach { account -> Box(Modifier.weight(1f)) { accountCard(account) } }
+                                if (pair.size == 1) Spacer(Modifier.weight(1f))
+                            }
+                        }
+                    } else {
+                        accounts.forEach { accountCard(it) }
                     }
                     Note("仅支持人民币。余额来自记账数据或手动填写，与银行实际余额可能有差异。")
                 }
@@ -792,6 +874,7 @@ private fun SavingsApp(
         }
         }
       }
+    }
     }
     DialogHost(importVisible) { finished ->
         pendingBackup?.let { backup ->
@@ -1137,6 +1220,32 @@ private fun SavingsApp(
     var mounted by remember { mutableStateOf(show) }
     LaunchedEffect(show) { if (show) mounted = true }
     if (mounted) content { mounted = false }
+}
+
+/**
+ * Wide windows use the pinned small app bar so the page starts closer to the top; the large
+ * collapsing title would waste most of a landscape window's height. Both variants share the
+ * same slots and scroll behaviour, so switching orientation keeps the bar state hoisted.
+ */
+@Composable private fun AdaptiveTopAppBar(
+    wide: Boolean,
+    title: String,
+    subtitle: String = "",
+    color: Color,
+    scrollBehavior: ScrollBehavior,
+    bottomContent: @Composable () -> Unit = {},
+    actions: @Composable RowScope.() -> Unit = {},
+    navigationIcon: @Composable () -> Unit = {},
+) {
+    if (wide) {
+        SmallTopAppBar(title = title, subtitle = subtitle, color = color,
+            scrollBehavior = scrollBehavior, bottomContent = bottomContent,
+            actions = actions, navigationIcon = navigationIcon)
+    } else {
+        TopAppBar(title = title, subtitle = subtitle, color = color,
+            scrollBehavior = scrollBehavior, bottomContent = bottomContent,
+            actions = actions, navigationIcon = navigationIcon)
+    }
 }
 
 @Composable private fun AppDialog(
