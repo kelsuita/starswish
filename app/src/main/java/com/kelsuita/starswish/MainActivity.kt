@@ -173,6 +173,11 @@ class MainActivity : ComponentActivity() {
         // The language lives outside the appearance snapshot: every screen reads it through
         // Languages.tr while composing, so updating it here repaints without a restart.
         Languages.set(AppLanguage.entries[store.language()])
+        // First launch records the language-based default for the quote: on for Chinese, off
+        // elsewhere. Later language switches keep whatever the user last chose.
+        if (store.quoteEnabled() == null) {
+            runCatching { store.saveQuoteEnabled(Languages.current.isChinese) }
+        }
         setContent {
             val appearance = remember(revision) { store.appearance() }
             val dark = when (appearance.themeMode) {
@@ -265,9 +270,14 @@ private fun SavingsApp(
     val layoutDirection = LocalLayoutDirection.current
     val versionName = remember { context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty() }
     var hitokoto by remember { mutableStateOf(store.hitokoto()) }
+    // The quote is a Chinese-only extra: hiding the switch for other languages also stops the
+    // request and the caption, while the stored choice is kept for a later switch back.
+    var quoteEnabled by remember { mutableStateOf(store.quoteEnabled() ?: Languages.current.isChinese) }
+    val quoteShown = Languages.current.isChinese && quoteEnabled
     var quoteLoading by remember { mutableStateOf(false) }
     var quoteRetry by remember { mutableIntStateOf(0) }
-    LaunchedEffect(quoteRetry) {
+    LaunchedEffect(quoteRetry, quoteShown) {
+        if (!quoteShown) return@LaunchedEffect
         if (hitokoto == null || quoteRetry > 0) {
             quoteLoading = true
             val fetched = fetchHitokoto()
@@ -582,8 +592,13 @@ private fun SavingsApp(
                                         layout(placeable.width, visibleHeight) { placeable.placeRelative(0, 0) }
                                     }.clipToBounds()) {
                                         val side = if (wideLayout) 32.dp else TopAppBarDefaults.TitlePadding
-                                        Text(if (displayedPage == 1) tr("绑定小星记账中的人民币储蓄账户。")
-                                            else if (quoteLoading && quoteRetry == 0) tr("一言加载中…") else hitokoto ?: tr("一言加载中…"),
+                                        val caption = when {
+                                            displayedPage == 1 -> tr("绑定小星记账中的人民币储蓄账户。")
+                                            quoteShown -> if (quoteLoading && quoteRetry == 0)
+                                                tr("一言加载中…") else hitokoto ?: tr("一言加载中…")
+                                            else -> null
+                                        }
+                                        if (caption != null) Text(caption,
                                             modifier = Modifier.fillMaxWidth()
                                                 .then(if (displayedPage == 2) Modifier.clickable(enabled = !quoteLoading) { quoteRetry++ } else Modifier)
                                                 .padding(start = side, end = side, bottom = 8.dp),
@@ -881,6 +896,20 @@ private fun SavingsApp(
                             checked = appearance.compactList,
                             onCheckedChange = { value -> mutate { store.saveAppearance(appearance.copy(compactList = value)) } })
                     }
+                    // The quote is a Chinese-only extra, so the whole section is hidden rather than
+                    // shown disabled in other languages. Its copy intentionally stays untranslated.
+                    if (Languages.current.isChinese) {
+                        SmallTitle(text = "一言", textColor = accent,
+                            insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
+                        Card(Modifier.fillMaxWidth()) {
+                            SwitchPreference(title = "启用一言", summary = "中文玩家特调",
+                                checked = quoteEnabled,
+                                onCheckedChange = { value -> mutate {
+                                    store.saveQuoteEnabled(value)
+                                    quoteEnabled = value
+                                } })
+                        }
+                    }
                 }
                 5 -> {
                     Card(Modifier.fillMaxWidth()) {
@@ -916,7 +945,7 @@ private fun SavingsApp(
                     }
                     Panel {
                         Text(tr("数据留在你的手机"), fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        Note(tr("无需登录。打开设置页时会向一言接口请求一句话；账户、目标与已确认余额只保存在应用私有存储，不会发送给一言接口。不收集页面截图，不保存完整页面文字。卸载应用会删除数据。"))
+                        Note(tr("无需登录。启用一言后，应用会在没有缓存时向一言接口请求一句话；账户、目标与已确认余额只保存在应用私有存储，不会发送给一言接口。不收集页面截图，不保存完整页面文字。卸载应用会删除数据。"))
                         Note(tr("页面读取仅在你发起后两分钟内生效，并限定为小星记账。不会自动点击、修改账单、访问银行应用或执行转账。"))
                         Button(onClick = { disclosure = true }, modifier = Modifier.fillMaxWidth()) { Text(tr("管理读取权限")) }
                     }

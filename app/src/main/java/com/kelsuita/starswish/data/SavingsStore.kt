@@ -11,6 +11,17 @@ class SavingsStore(context: Context) {
     fun hitokoto(): String? = prefs.getString("hitokoto", null)
     fun saveHitokoto(value: String) = put("hitokoto", value)
 
+    /**
+     * Quote (一言) switch. Null means no choice has been recorded yet; the app then stores the
+     * first-launch default derived from the resolved UI language. The preference persists when
+     * switching languages; non-Chinese UI hides the quote regardless of this value.
+     */
+    fun quoteEnabled(): Boolean? =
+        if (prefs.contains("quote_enabled")) prefs.getBoolean("quote_enabled", true) else null
+    fun saveQuoteEnabled(value: Boolean) {
+        check(prefs.edit().putBoolean("quote_enabled", value).commit()) { tr("保存失败") }
+    }
+
     /** UI language index: 0 follows the system, 1 simplified Chinese, 2 traditional Chinese, 3 English. */
     fun language(): Int {
         if (prefs.contains("language_v2")) return prefs.getInt("language_v2", 0).coerceIn(0, 3)

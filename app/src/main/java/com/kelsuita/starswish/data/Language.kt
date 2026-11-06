@@ -11,6 +11,10 @@ enum class AppLanguage(val nativeName: String) {
     SimplifiedChinese("简体中文"),
     TraditionalChinese("繁體中文"),
     English("English"),
+    ;
+
+    /** Chinese copy is the only place the quote (一言) is offered. */
+    val isChinese: Boolean get() = this == SimplifiedChinese || this == TraditionalChinese
 }
 
 /**
@@ -256,8 +260,8 @@ private val Traditional = mapOf(
     "无法读取文件" to "無法讀取檔案",
     "无法写入所选文件" to "無法寫入所選檔案",
     "无法写入文件" to "無法寫入檔案",
-    "无需登录。打开设置页时会向一言接口请求一句话；账户、目标与已确认余额只保存在应用私有存储，不会发送给一言接口。不收集页面截图，不保存完整页面文字。卸载应用会删除数据。" to
-        "無需登入。開啟設定頁時會向一言介面請求一句話；帳戶、目標與已確認餘額只保存在應用程式私人儲存空間，不會傳送給一言介面。不收集頁面截圖，不保存完整頁面文字。解除安裝應用程式會刪除資料。",
+    "无需登录。启用一言后，应用会在没有缓存时向一言接口请求一句话；账户、目标与已确认余额只保存在应用私有存储，不会发送给一言接口。不收集页面截图，不保存完整页面文字。卸载应用会删除数据。" to
+        "無需登入。啟用一言後，應用程式會在沒有快取時向一言介面請求一句話；帳戶、目標與已確認餘額只保存在應用程式私人儲存空間，不會傳送給一言介面。不收集頁面截圖，不保存完整頁面文字。解除安裝應用程式會刪除資料。",
     "下移" to "下移",
     "先连接一份积累" to "先連結一份累積",
     "先去添加账户" to "先去新增帳戶",
@@ -507,8 +511,8 @@ private val English = mapOf(
     "无法读取文件" to "Cannot read the file",
     "无法写入所选文件" to "The selected file cannot be written",
     "无法写入文件" to "Cannot write the file",
-    "无需登录。打开设置页时会向一言接口请求一句话；账户、目标与已确认余额只保存在应用私有存储，不会发送给一言接口。不收集页面截图，不保存完整页面文字。卸载应用会删除数据。" to
-        "No login. Opening the settings page requests one quote from the Hitokoto API; accounts, goals and confirmed balances stay in private app storage and are never sent there. No page screenshots are collected and no full page text is stored. Uninstalling deletes the data.",
+    "无需登录。启用一言后，应用会在没有缓存时向一言接口请求一句话；账户、目标与已确认余额只保存在应用私有存储，不会发送给一言接口。不收集页面截图，不保存完整页面文字。卸载应用会删除数据。" to
+        "No login. When Hitokoto is enabled, the app requests one quote from the Hitokoto API when nothing is cached; accounts, goals and confirmed balances stay in private app storage and are never sent there. No page screenshots are collected and no full page text is stored. Uninstalling deletes the data.",
     "下移" to "Move down",
     "先连接一份积累" to "Link some savings first",
     "先去添加账户" to "Add an account first",
