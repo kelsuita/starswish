@@ -16,7 +16,7 @@
 
 ## 下载
 
-当前发布版本：[星愿攒钱 1.4.0](https://github.com/kelsuita/starswish/releases/tag/v1.4.0)
+当前发布版本：[星愿攒钱 1.4.2](https://github.com/kelsuita/starswish/releases/tag/v1.4.2)
 
 - `app-universal-release.apk`：通用架构包，不确定设备架构时选择此包
 - `app-armeabi-v7a-release.apk`：32 位 ARM 设备
