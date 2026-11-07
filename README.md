@@ -1,150 +1,200 @@
-# 星愿攒钱
+# Starwish
 
-> 把想买的东西写下来，看着它一点点变成现实。
+**English** · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md)
 
-一个用 Kotlin + Jetpack Compose 写的 Android 攒钱目标应用。界面基于 **MIUIX 0.9.4**，参考了 HyperOS 的设置页与大标题交互：整页横向切换、上滑折叠标题、跟随强调色推导的完整色板，以及可选的背景模糊。
+> Write down what you want to buy, and watch it slowly come true.
 
-[下载安装](https://github.com/kelsuita/starswish/releases/latest) · [反馈问题](https://github.com/kelsuita/starswish/issues) · [爱发电捐助](https://afdian.com/a/kelsuita)
+An Android savings-goal app built with Kotlin and Jetpack Compose. The interface is based on
+**MIUIX 0.9.4** and borrows the large-title and settings-page language of HyperOS: whole-page
+horizontal paging, a title that collapses while scrolling, a full color scheme derived from the
+accent color, and optional background blur.
 
-## 简介
+[Download](https://github.com/kelsuita/starswish/releases/latest) ·
+[Issues](https://github.com/kelsuita/starswish/issues) ·
+[Donate on Afdian](https://afdian.com/a/kelsuita)
 
-星愿攒钱不碰你的钱，只做一件事：把「想攒多少、还差多少、每天大概要存多少」算清楚，摆在每天都会看到的地方。
+## Introduction
 
-你可以同时维护多个攒钱目标，把每个目标的进度绑定到一个或多个储蓄账户。首页横幅会展示你指定的那个目标，进度条、百分比和每日建议金额都随账户余额实时更新。金额全部用整数分计算，不会出现 `0.1 + 0.2` 那种误差。
+Starwish never touches your money. It does one thing: it works out how much you want to save,
+how much is still missing, and roughly how much you need to put aside each day — and keeps that
+in front of you every day.
 
-如果你也在用小星记账，可以在你主动打开账户详情页时，由应用读取页面上可见的「人民币余额」，核对后再同步到目标里——没有后台同步，不会读账单流水，也不会替你确认。
+You can maintain several savings goals at once and bind each goal's progress to one or more
+savings accounts. The banner on the home page shows the goal you choose, and the progress bar,
+percentage and daily suggestion update live with the account balances. All amounts are stored
+as integer cents, so there is no `0.1 + 0.2` rounding error.
 
-## 下载
+If you also use Xiaoxing Ledger (小星记账), the app can read the visible "CNY balance" when you
+open an account detail page yourself, and sync it to a goal after you confirm it. There is no
+background sync, no transaction history is read, and nothing is confirmed on your behalf.
 
-当前发布版本：[星愿攒钱 1.4.5](https://github.com/kelsuita/starswish/releases/tag/v1.4.5)
+## Download
 
-- `app-universal-release.apk`：通用架构包，不确定设备架构时选择此包
-- `app-armeabi-v7a-release.apk`：32 位 ARM 设备
-- `app-arm64-v8a-release.apk`：64 位 ARM 设备
-- `app-x86-release.apk`：32 位 x86 设备
-- `app-x86_64-release.apk`：64 位 x86 设备
-- 所有上述 Release 包均使用同一项目正式签名；调试包使用 Android 调试签名
-- 系统要求：Android 8.0（API 26）及以上
-- 两个 APK 的签名不同，无法互相覆盖安装
-- 正式签名与 1.0.0 初次发布时使用的调试签名不同。之前安装了旧版的用户通常需要先卸载旧版；卸载会删除应用数据，请先妥善保留重要信息
+Current release: [Starwish Argenti 1.5.0](https://github.com/kelsuita/starswish/releases/tag/v1.5.0)
 
-后续 release 更新将继续使用同一正式密钥签名，可直接升级正式签名的版本。请勿丢失或更换该密钥，否则 Android 将无法把新版本作为旧版本的更新安装。
+- `app-universal-release.apk`: universal package, choose this if you are unsure about the ABI
+- `app-armeabi-v7a-release.apk`: 32-bit ARM devices
+- `app-arm64-v8a-release.apk`: 64-bit ARM devices
+- `app-x86-release.apk`: 32-bit x86 devices
+- `app-x86_64-release.apk`: 64-bit x86 devices
+- All release packages above are signed with the same project release key; debug builds use the Android debug key
+- Requirements: Android 8.0 (API 26) or newer
+- The two signing keys are different and cannot overwrite each other on install
+- The release key differs from the debug key used for the first 1.0.0 release. Users still on an older build usually have to uninstall it first; uninstalling deletes app data, so back up anything important first
 
-## 快速开始
+Future releases will keep using the same release key, so release builds can be upgraded in place.
+Do not lose or replace that key — Android will refuse to install a new version as an update otherwise.
 
-1. 下载并安装与你设备架构匹配的 Release APK，不确定时选择 `app-universal-release.apk`。
-2. 在「账户」添加账户并填写余额；不使用小星记账时，也可以完全手动维护。
-3. 在「首页」创建心愿，填写目标金额、关联账户并选择进度计算方式。
-4. 更新账户余额后查看目标进度。主题、强调色和首页横幅可在「设置 → 主题设置」调整。
+## Quick start
 
-小星记账余额读取为可选功能，需要单独启用无障碍服务；首次使用请阅读下方的接入说明。
+1. Download and install the release APK that matches your device ABI; choose `app-universal-release.apk` if unsure.
+2. Add an account on the "Accounts" tab and enter its balance; you can maintain balances entirely by hand without Xiaoxing Ledger.
+3. Create a wish on the "Home" tab: set the target amount, link accounts and pick how progress is calculated.
+4. Update account balances to see goal progress. Theme, accent color and the home banner live under "Settings → Theme settings".
 
-## 功能
+Reading balances from Xiaoxing Ledger is optional and requires enabling the accessibility service
+separately; read the integration notes below before using it for the first time.
 
-### 攒钱目标
+## Features
 
-- 设置目标名称、目标金额与可选截止日期；首页横幅、进度条与图标跟随应用强调色
-- 每个目标可绑定一个或多个储蓄账户，展示进度百分比、已攒金额、剩余金额与每日建议金额
-- 两种进度算法：按账户**当前余额**计算，或从创建目标时的余额**起点**计算新增积累
-- 进度限制在 0%–100%，多目标余额不会相加，也不会互相占用
+### Savings goals
 
-### 储蓄账户
+- Set a goal name, target amount and optional deadline; the home banner, progress bar and icons follow the app accent color
+- Each goal can be linked to one or more savings accounts and shows the progress percentage, saved amount, remaining amount and daily suggestion
+- Two progress modes: based on the accounts' **current balance**, or based on the **starting balance** recorded when the goal was created
+- Progress is clamped to 0%–100%; balances of multiple goals are never added together or shared
 
-- 手动添加、修改、删除账户；仍有关联目标的账户会被阻止删除
-- 支持从小星记账读取当前余额：在你主动发起请求后，打开小星账户详情页即自动识别金额，回到星愿核对后确认同步
-- 读取只针对单个账户、单次请求，两分钟内未完成或页面信息不明确就停止
+### Savings accounts
 
-### 主题与外观
+- Add, edit and delete accounts by hand; deleting an account that is still linked to a goal is blocked
+- Read the current balance from Xiaoxing Ledger: after you start a request, open the Xiaoxing account detail page and the amount is recognized automatically; confirm the sync back in Starwish
+- Reading is limited to one account per request and stops if it is not finished within two minutes or the page is ambiguous
 
-外观选项包括：
+### Theme and appearance
 
-- 主题模式：跟随系统 / 浅色 / 深色
-- 深色模式纯黑背景：仅深色模式生效，页面底色转为纯黑，卡片保留层次
-- 强调色：默认、莫奈取色、蓝色、绿色、橙色、紫色
-- 调色板风格与 Material 3 色彩规范（2021 / 2025），由 MIUIX `ThemeController` 推导完整色板；莫奈取色时同样生效
-- 首页横幅：浅色 / 深色；可指定横幅展示哪个目标；紧凑目标列表
-- 背景模糊：Android 13 及以上可用，作用于大标题栏与底部导航
-- 语言：跟随系统 / 简体中文 / 繁體中文 / English，在设置页顶部即时切换，无需重启；首次启动默认跟随系统
+Appearance options:
 
-背景模糊开关位于「设置 → 外观」，其余上述选项集中在主题设置页。设置保存在本机，重启后依然生效。
+- Theme mode: follow system / light / dark
+- Pure black background in dark mode: dark mode only; the page background becomes black while cards keep their depth
+- Accent color: default, Monet, blue, green, orange, purple
+- Palette style and Material 3 color spec (2021 / 2025), with the full scheme derived by MIUIX `ThemeController`; also applies to Monet colors
+- Home banner: light / dark; choose which goal the banner shows; compact goal list
+- Background blur: Android 13 and newer, applied to the large title bar and the bottom navigation
+- Language: follow system / Simplified Chinese / Traditional Chinese / English, switchable at the top of the settings page without restarting; follows the system on first launch
 
-### 交互与细节
+The background blur switch is under "Settings → Appearance"; the other options live on the theme
+settings page. Settings are stored on the device and survive restarts.
 
-- 首页、账户、设置三页整页横向切换，标题与内容一起跟手移动，底部导航固定；各页保留独立滚动位置
-- 顶部大标题随滚动折叠，列表滚动到边界时有回弹效果
-- 「关于」是独立页面，包含项目 GitHub、爱发电捐助入口、使用步骤、数据与权限说明、进度计算方式和官方接口文档
-- 设置页顶部的一言仅在简体或繁体中文界面且已启用时显示：首次使用中文界面默认开启，可在「设置 → 外观 → 主题设置 → 首页」关闭；非中文界面自动隐藏并停止请求，切回中文保留此前的开关选择。启用且没有本地一言时从公开接口获取并保存，切页或重启不会刷新已有内容，点击可手动重新获取
+### Interaction details
 
-### JSON 备份
+- Home, Accounts and Settings pages switch horizontally as a whole page; titles and content move together, the bottom navigation stays fixed, and each page keeps its own scroll position
+- The large title collapses while scrolling, and lists bounce when they reach an edge
+- "About" is a separate page with the GitHub project, Afdian donation entry, usage steps, data and permission notes, progress calculation and the official API documentation
+- The quote at the top of the settings page is only shown in Simplified or Traditional Chinese with the option enabled: it is on by default for Chinese interfaces and can be turned off under "Settings → Appearance → Theme settings → Home"; it is hidden and stops requesting in other languages, and the previous choice is kept when switching back. When enabled and no local quote exists, one is fetched from a public API and saved; switching pages or restarting does not refresh existing content, and tapping it fetches a new one
 
-- 入口位于「设置 → 备份 → 导入与导出」，在外观分组下方、应用分组上方
-- 导出账户、目标、外观设置和已保存的一言，通过系统文件选择器保存为 JSON
-- 导入时校验备份格式、版本、金额范围及账户关联，确认后整份替换现有数据；建议先导出当前数据
-- 备份为明文文件，包含账户名称与余额，请妥善保存；支持最大 1 MB 的备份文件
-- 不包含读取中的临时请求、待确认余额或系统无障碍权限；换设备后需重新启用权限
+### JSON backup
 
-## 隐私与数据
+- Entry point: "Settings → Backup → Import and export", below the appearance group and above the app group
+- Exports accounts, goals, appearance settings and the saved quote as JSON through the system file picker
+- Import validates the format, version, amount ranges and account links, then replaces all existing data after confirmation; exporting the current data first is recommended
+- Backups are plain-text files containing account names and balances, so store them safely; up to 1 MB is supported
+- Temporary read requests, pending balances and accessibility permissions are not included; permissions must be enabled again on a new device
 
-- 所有目标与账户数据仅保存在本机私有存储，无账号、无登录、无广告、无统计 SDK
-- 不读取银行卡号、密码或完整账单，不执行点击、转账或修改小星记账数据
-- 仅在中文界面启用一言且需要获取内容或手动点击刷新时发出请求；非中文界面或关闭开关时不请求，不会向该接口发送账户、余额或目标信息；打开 GitHub、捐助或官方文档链接时会跳转外部应用，由对应站点处理访问
-- 小星余额读取依赖 Android 无障碍服务，只识别限定的应用包名与账户详情页，可随时在系统设置中关闭
-- Android 系统自动备份与设备迁移已关闭；可手动导出 JSON 备份。卸载应用会删除本地数据，请提前将备份保存到应用外部
+## Privacy and data
 
-## 小星记账接入方式和边界
+- All goal and account data stays in the app's private storage on the device: no account, no login, no ads, no analytics SDK
+- No card numbers, passwords or full statements are read; no taps, transfers or changes to Xiaoxing Ledger data are performed
+- Requests are only made when the Chinese UI has the quote feature enabled and content is needed or you tap refresh; no requests are made in other languages or with the option off, and no account, balance or goal data is sent to that API; opening GitHub, donation or documentation links hands over to the external app and the corresponding site
+- Reading Xiaoxing balances relies on the Android accessibility service, only recognizes a specific package and account detail page, and can be turned off in system settings at any time
+- Android auto backup and device transfer are disabled; export a JSON backup manually instead. Uninstalling the app deletes local data, so keep backups outside the app in advance
 
-已核对的官方文档：
+## Xiaoxing Ledger integration and limits
 
-- URL Scheme：<https://cxincx.com/support/scheme.html>
-- 加密备份说明：<https://cxincx.com/support/backup/7.html>
+Official documentation checked for this project:
 
-根据项目接入时核对的文档，Scheme 提供插入账单与唤起自动记账弹窗，未提供本项目可用的账户余额查询接口，备份文件也不能直接打开读取。因此，当前实现通过可见页面识别余额，不解析加密数据库，也不使用账单流水累计值代替余额。
+- URL Scheme: <https://cxincx.com/support/scheme.html>
+- Encrypted backup notes: <https://cxincx.com/support/backup/7.html>
 
-当前使用 Android 无障碍服务读取用户主动打开的 **小星记账可见账户详情页**：
+According to the documentation checked while building this project, the scheme can insert
+transactions and open the automatic bookkeeping dialog; it does not offer an account-balance query
+usable here, and the backup file cannot be opened directly. The current implementation therefore
+recognizes the balance from the visible page: it does not parse the encrypted database and does not
+use the accumulated transaction total instead of the balance.
 
-1. 在「账户」添加储蓄账户，名称必须与小星记账完全一致，并填写初始余额。
-2. 阅读应用内说明，再到系统设置开启「星愿攒钱 · 读取小星账户」。
-3. 在账户卡片点击「读取小星余额」，应用会打开小星记账。
-4. 两分钟内打开对应账户详情。服务检测到 `com.cxincx.xxjz.account.AccountDetailActivity` 后自动读取页面，要求完整账户名称与顶部「人民币余额」及数值可见；忽略下方流水里的历史余额。无需在小星页面额外点击读取。
-5. 成功读取后，小星页面顶部显示「已读取，请返回星愿」胶囊，点按直接打开星愿的「账户」确认页；核对识别金额后点击「确认同步」。胶囊显示 3 秒后自动淡出，也可手动返回星愿查看待确认结果。
+The Android accessibility service reads the **visible account detail page of Xiaoxing Ledger**
+that you open yourself:
 
-顶部胶囊是流体云风格的本地无障碍悬浮提示，不是 OPPO 系统原生流体云。它使用已启用服务的 `TYPE_ACCESSIBILITY_OVERLAY`，不另索取普通悬浮窗权限，不显示账户名或余额，也不会自动确认同步。原生 OPPO 流体云仍需平台服务授权、UPK 模板及 SeedlingSupportSDK 接入，目前未接入。服务中断或销毁时会移除胶囊；点击支持星愿冷启动及已在后台运行两种情况。提示仅在成功识别并保存候选余额后出现，不能替代真实设备读取联调。
+1. Add a savings account on the "Accounts" tab with a name exactly matching the one in Xiaoxing Ledger, and enter the initial balance.
+2. Read the in-app explanation, then enable "Starwish · read Xiaoxing accounts" in system settings.
+3. Tap "Read Xiaoxing balance" on the account card; the app opens Xiaoxing Ledger.
+4. Open the matching account detail page within two minutes. When the service sees `com.cxincx.xxjz.account.AccountDetailActivity` it reads the page automatically and requires the full account name plus the visible "CNY balance" at the top; balances in the transaction history below are ignored. No extra tap on the Xiaoxing page is needed.
+5. After a successful read, a capsule saying "Read, please return to Starwish" appears at the top of the Xiaoxing page; tapping it opens Starwish's Accounts confirmation page directly. Check the recognized amount and tap "Confirm sync". The capsule fades out after three seconds, or you can go back to Starwish manually to see the pending result.
 
-**这不是后台实时同步**。一次请求只针对一个账户，收到候选结果或两分钟超时后停止读取。没有明确名称、余额标签、有多个不同余额、信用额度、外币、总资产概览等情况下会拒绝识别；手动更新始终可用。未读到时可直接返回修改余额，或重新发起读取。授权未开启时不会发起读取。
+The top capsule is a local accessibility overlay in a fluid-cloud style, not an OPPO system
+fluid cloud. It uses `TYPE_ACCESSIBILITY_OVERLAY` from the already enabled service, requests no
+extra overlay permission, shows no account name or balance, and never confirms a sync on its own.
+A native OPPO fluid cloud would still need platform authorization, UPK templates and the
+SeedlingSupportSDK; it is not integrated. The capsule is removed when the service is interrupted
+or destroyed; taps work both when Starwish is cold-started and when it is already in the background.
+The prompt only appears after a balance was recognized and saved as a candidate, and it cannot
+replace real-device integration testing.
 
-已依据用户提供的 Activity 名称与账户详情截图适配顶部人民币余额，并添加包含流水历史余额、金额分离节点的解析测试。尚未取得真实设备的无障碍节点联调结果；部分页面可能不暴露可访问文字或使用不同标签。**截图和解析测试不能替代真实小星版本的读取验证。**
+**This is not background syncing.** A request covers a single account and stops after a candidate
+result or a two-minute timeout. Recognition is refused when the name is ambiguous, the balance label
+is missing, several different balances exist, or the page shows credit limits, foreign currency or
+an all-assets overview; manual updates are always available. If nothing was read, go back and edit
+the balance by hand or start another read. No read is started unless permission is enabled.
 
-页面读取仅限定小星包名 `com.cxincx.xxjz`；不执行点击、修改账单、转账，不保存截图和完整页面文字。仅在中文界面启用一言且需要获取内容或手动刷新时向 `v1.hitokoto.cn` 发起请求，不向该接口发送账户、余额或目标；非中文界面或关闭开关时不请求。应用有 INTERNET 权限，备份与设备迁移关闭。可随时从系统设置关闭服务。卸载会删除应用数据。
+The top CNY balance was adapted from the activity name and account detail screenshot provided by
+the user, with parsing tests covering transaction-history balances and split amount nodes. Real
+device accessibility node integration has not been completed yet; some pages may not expose
+accessible text or may use different labels. **Screenshots and parser tests cannot replace a read
+on a real Xiaoxing build.**
 
-Android 13 及以上从文件安装应用时，系统可能先限制开启无障碍权限；如出现此情况，可在本应用的系统「应用信息」菜单中按系统提示允许受限设置，再手动开启。权限必须由设备用户确认。
+Page reading is restricted to the Xiaoxing package `com.cxincx.xxjz`; it does not tap, modify
+transactions or transfer money, and it does not save screenshots or full page text. Requests to
+`v1.hitokoto.cn` are only made when the Chinese UI has the quote feature enabled and content is
+needed or manually refreshed, and no account, balance or goal data is sent there; no requests are
+made in other languages or with the option off. The app holds the INTERNET permission; backup and
+device transfer are disabled. The service can be turned off in system settings at any time.
+Uninstalling deletes app data.
 
-## 构建与安装
+On Android 13 and newer, the system may restrict enabling accessibility from an installed file
+first; if that happens, allow restricted settings from the app's system "App info" menu as the
+system prompts, then enable it manually. Permissions must always be confirmed by the device owner.
 
-要求 JDK 21、Android SDK Platform 37、可用网络或已有依赖缓存。Gradle Wrapper 已包含。最低支持 Android 8.0（API 26），targetSdk 36。
+## Build and install
 
-Windows（运行单元测试、构建 debug APK 并执行静态检查）：
+Requires JDK 21, Android SDK Platform 37, and network access or an existing dependency cache. The
+Gradle wrapper is included. Minimum Android 8.0 (API 26), targetSdk 36.
+
+Windows (run unit tests, build the debug APK and run static checks):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\build.ps1
 ```
 
-或者在 Android Studio 打开本目录，同步 Gradle 后运行。Android Studio 可自动创建本机 `local.properties`；该文件不应提交到版本控制。
+Alternatively open this directory in Android Studio, sync Gradle and run. Android Studio can create
+the local `local.properties` file; it should not be committed.
 
-也可以直接运行 Gradle 任务：
+Gradle tasks can also be run directly:
 
 ```powershell
 ./gradlew.bat testDebugUnitTest assembleDebug lintDebug
 ```
 
-生成的 debug 安装包：`app/build/outputs/apk/debug/app-debug.apk`。
+The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
 
 ```powershell
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-### 正式签名与 release 构建
+### Release signing and release builds
 
-发布的 release APK 使用项目专用正式密钥签名，不会回退到 Android 调试签名。私钥和包含密码的本机配置不包含在仓库中。维护者在新环境构建正式版本时，需要从安全备份恢复密钥，并在项目根目录创建 `keystore.properties`，文件格式如下：
+Published release APKs are signed with a dedicated project release key and never fall back to the
+Android debug key. The private key and the local configuration containing passwords are not part
+of the repository. Maintainers building a release in a new environment need to restore the key
+from a secure backup and create `keystore.properties` in the project root:
 
 ```properties
 storeFile=C:/secure/path/starswish-release.keystore
@@ -153,57 +203,68 @@ keyAlias=starswish
 keyPassword=YOUR_KEY_PASSWORD
 ```
 
-`keystore.properties` 已由 `.gitignore` 排除，密钥文件也不应提交或上传到公开仓库。配置好后运行：
+`keystore.properties` is excluded by `.gitignore`, and the key file must not be committed or
+uploaded to a public repository. With that in place, run:
 
 ```powershell
 ./gradlew.bat assembleRelease
 ```
 
-已签名 APK 输出到 `app/build/outputs/apk/release/app-universal-release.apk`。没有本机签名配置时，构建会输出未签名 APK，不能直接作为安装包发布。自行构建分发时可使用自己的密钥，但无法覆盖安装本项目正式发布的 APK。
+Signed APKs are written to `app/build/outputs/apk/release/app-universal-release.apk`. Without a
+local signing configuration the build produces unsigned APKs that cannot be published as
+installers. Self-built packages can use your own key, but they cannot overwrite this project's
+official release APKs.
 
-发布前可使用 Android SDK Build Tools 中的 `apksigner` 检查签名：
+Before publishing, verify the signature with `apksigner` from the Android SDK Build Tools:
 
 ```powershell
 apksigner verify --print-certs app/build/outputs/apk/release/app-universal-release.apk
 ```
 
-请将 Build Tools 目录加入 `PATH`，或使用该工具的完整路径。维护项目正式版本时，应确认签名证书与既有正式版本一致，并为密钥与密码保留独立的安全备份。
+Add the Build Tools directory to `PATH` or use the full path to the tool. When maintaining official
+releases, confirm that the signing certificate matches existing releases and keep an independent
+secure backup of the key and passwords.
 
-## 验证
+## Verification
 
-- `SavingsLogicTest`：金额精度与输入边界、绑定账户计算、从起点计算、负数/超额进度、余额标签、不同账户、歧义结果、信用额度及外币拒绝。
-- `lintDebug`：静态检查。保留固定依赖版本；版本升级建议和 KTX 风格建议不影响构建。
-- 顶部胶囊已在隔离模拟器通过辅助无障碍服务加载实际构建中的提示组件，验证显示、自动消失、服务关闭时移除，以及点击返回已运行的星愿；确认页冷启动入口也已验证。该组件测试没有触发真实小星的读取事件，不代表实际账户余额读取已联调通过。
-- `tools/smoke-test.ps1`：安装当前构建，在专用隔离模拟器验证添加账户、目标必填校验、进度计算、重启持久化、权限披露、关于页与系统返回、边缘返回手势及主题设置。该脚本会清除指定测试模拟器中本应用的数据，不要对日常设备运行。
-- `tools/start-test-emulator.ps1`：使用本地已有 Android 35 x86_64 镜像启动隔离测试模拟器，端口 5580。不会操作连接的真实手机。测试脚本只会清空指定隔离模拟器中本应用的数据。
+- `SavingsLogicTest`: amount precision and input bounds, linked-account calculation, calculation from a starting balance, negative/overflow progress, balance labels, multiple accounts, ambiguous results, credit limits and foreign currency rejection.
+- `lintDebug`: static checks. Dependency versions are pinned; version upgrade suggestions and KTX style suggestions do not affect the build.
+- The top capsule has been loaded through an isolated accessibility helper service on an emulator using the actual prompt component from a real build, verifying display, auto-dismiss, removal when the service is disabled, and tapping back into a running Starwish; the cold-start entry from the confirmation page was verified too. That component test did not trigger a real Xiaoxing read and does not mean real balance reading has passed integration testing.
+- `tools/smoke-test.ps1`: installs the current build and verifies adding an account, required goal validation, progress calculation, restart persistence, permission disclosure, the About page and system back, edge back gestures and theme settings on a dedicated isolated emulator. The script clears this app's data on the specified test emulator; do not run it against a daily-use device.
+- `tools/start-test-emulator.ps1`: starts an isolated test emulator on port 5580 from an existing local Android 35 x86_64 image. It never touches a connected physical phone. Test scripts only clear this app's data on the specified isolated emulator.
 
-## 已知限制
+## Known limitations
 
-- 小星记账余额读取尚未在真实设备上完成无障碍节点联调，不同版本的页面结构可能导致识别失败
-- 已修复状态栏背景采集范围及切换标签后底栏模糊失效的问题；已在 Android 35 模拟器使用宿主 GPU 验证，其他厂商系统和 GPU 的表现仍需设备验证。详见 [Miuix 审查记录](docs/miuix-review.md)
-- 仅支持人民币储蓄账户；不提供多币种、自动划款或资金分配
-- 正式 APK 目前为项目侧载分发；尚未配置应用商店发布流程
+- Balance reading from Xiaoxing Ledger has not completed real-device accessibility node integration; page structure changes in other versions may break recognition
+- Fixed the status bar backdrop sampling range and blur failing on the bottom bar after switching tabs; verified on an Android 35 emulator with the host GPU, behavior on other vendor systems and GPUs still needs device testing. See the [Miuix review notes](docs/miuix-review.md)
+- Only CNY savings accounts are supported; no multi-currency, automatic transfers or fund allocation
+- Official APKs are currently sideloaded; no app store release pipeline is configured
 
-## 项目结构
+## Project structure
 
 ```text
 app/src/main/java/com/kelsuita/starswish/
-  MainActivity.kt                      Compose 页面、编辑交互与系统入口
-  data/Models.kt                       金额、账户、目标与进度计算
-  data/SavingsStore.kt                  原子本地持久化、候选余额与确认
-  data/Appearance.kt                    本地外观设置模型
-  data/Hitokoto.kt                      一言网络请求（缓存由 SavingsStore 管理）
-  sync/BalanceParser.kt                保守的页面余额解析
-  sync/XiaoxingAccessibilityService.kt  限时、限定包名的可见页面读取
-  sync/BalanceReadCapsule.kt            读取成功后的无障碍悬浮提示
-app/src/test/                          核心逻辑单元测试
-tools/                                 构建与隔离模拟器验证脚本
+  MainActivity.kt                      Compose pages, editors and system entry points
+  data/Models.kt                       Amounts, accounts, goals and progress math
+  data/SavingsStore.kt                 Atomic local persistence, candidate balance and confirmation
+  data/Appearance.kt                   Local appearance model
+  data/Hitokoto.kt                     Quote network request (cache is managed by SavingsStore)
+  sync/BalanceParser.kt                Conservative page balance parsing
+  sync/XiaoxingAccessibilityService.kt Time-limited, package-restricted visible page reading
+  sync/BalanceReadCapsule.kt           Accessibility overlay prompt after a successful read
+app/src/test/                          Unit tests for core logic
+tools/                                 Build and isolated emulator verification scripts
 ```
 
-同一账户可以用于多个独立目标；这不会自动分配资金或实际划款。首页横幅只展示一个指定目标的进度（默认第一个）。修改目标名称、金额或日期不会重置起点；修改关联账户或计算模式会重设起点。
+The same account can back several independent goals; this does not allocate funds or move money.
+The home banner only shows the progress of one chosen goal (the first by default). Renaming a goal
+or changing its amount or date does not reset the starting point; changing linked accounts or the
+calculation mode does.
 
-## 许可证
+## License
 
-本项目采用 [MIT 许可证](LICENSE)，允许使用、修改和分发，包括商业用途；分发时需保留版权声明和许可证全文。软件按原样提供，不作任何担保。
+This project is released under the [MIT License](LICENSE), which allows use, modification and
+redistribution, including commercial use; the copyright notice and license text must be retained
+when redistributing. The software is provided as is, without any warranty.
 
-第三方依赖仍遵循各自的许可证。
+Third-party dependencies keep their own licenses.

@@ -762,7 +762,7 @@ private fun SavingsApp(
                     Overview(goals, accounts, appearance, accent)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically) {
-                        Text(tr("目标列表"), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        SmallTitle(tr("目标列表"), insideMargin = PaddingValues(start = 12.dp, top = 4.dp, bottom = 4.dp))
                         OverlayIconDropdownMenu(entry = DropdownEntry(listOf(
                             DropdownItem(tr("新建目标"), onClick = { editingGoalId = null; goalEditor = true }),
                             DropdownItem(tr("排序"), onClick = { navigate(6) }),
@@ -797,8 +797,8 @@ private fun SavingsApp(
                         val account = accounts.firstOrNull { it.id == candidate.accountId }
                         Panel {
                             Badge(tr("等待你确认"), accent)
-                            Text(account?.name ?: tr("账户已删除"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                            Text("¥ ${Money.format(candidate.balance)}", fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                            Text(account?.name ?: tr("账户已删除"), style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold)
+                            Text("¥ ${Money.format(candidate.balance)}", style = MiuixTheme.textStyles.title2, fontWeight = FontWeight.Bold)
                             Note(tr("识别于 %s。请核对小星页面，确认后才会更新进度。", timeLabel(candidate.capturedAt)))
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Button(onClick = { mutate { store.clearCandidate() } }, modifier = Modifier.weight(1f)) { Text(tr("忽略")) }
@@ -809,7 +809,7 @@ private fun SavingsApp(
                     }
                     if (request != null && request.expiresAt > System.currentTimeMillis()) {
                         Panel {
-                            Text(tr("等待读取账户详情"), fontWeight = FontWeight.Bold)
+                            Text(tr("等待读取账户详情"), style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold)
                             Note(tr("两分钟内打开小星记账中的对应账户详情，检测到详情页后自动读取顶部人民币余额，再返回确认。"))
                             Button(onClick = { mutate { store.cancelCapture() } }) { Text(tr("取消本次读取")) }
                         }
@@ -818,8 +818,8 @@ private fun SavingsApp(
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             IconTile("link", accent)
                             Column(Modifier.weight(1f)) {
-                                Text(tr("小星记账"), fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                                Text(if (enabled) tr("页面读取已开启 · 按需读取") else tr("开启页面读取，同步账户余额"), fontSize = 12.sp,
+                                Text(tr("小星记账"), style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold)
+                                Text(if (enabled) tr("页面读取已开启 · 按需读取") else tr("开启页面读取，同步账户余额"), style = MiuixTheme.textStyles.footnote1,
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                             }
                             Badge(if (enabled) tr("已授权") else tr("未授权"), accent)
@@ -840,7 +840,7 @@ private fun SavingsApp(
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically) {
-                        Text(tr("我的账户"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        SmallTitle(tr("我的账户"), insideMargin = PaddingValues(start = 12.dp, top = 4.dp, bottom = 4.dp))
                         OverlayIconDropdownMenu(entry = DropdownEntry(listOf(
                             DropdownItem(tr("添加账户"), onClick = { editingAccountId = null; accountEditor = true }),
                             DropdownItem(tr("排序"), onClick = { navigate(7) }),
@@ -854,19 +854,20 @@ private fun SavingsApp(
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 IconTile("bank", accent)
                                 Column(Modifier.weight(1f)) {
-                                    Text(account.name, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                                    Text(tr(account.source), fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                                    Text(account.name, style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold, maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                    Text(tr(account.source), style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                                 }
                             }
-                            Text("¥ ${Money.format(account.balance)}", fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                            Text(tr("更新于 %s", timeLabel(account.updatedAt)), fontSize = 12.sp,
+                            Text("¥ ${Money.format(account.balance)}", style = MiuixTheme.textStyles.title2, fontWeight = FontWeight.Bold)
+                            Text(tr("更新于 %s", timeLabel(account.updatedAt)), style = MiuixTheme.textStyles.footnote1,
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(onClick = { capture(account) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColorsPrimary()) {
-                                    Text(tr("读取小星余额"), fontSize = 13.sp)
+                                    Text(tr("读取小星余额"))
                                 }
-                                Button(onClick = { editingAccountId = account.id; accountEditor = true }) { Text(tr("编辑"), fontSize = 13.sp) }
-                                Button(onClick = { deletingAccount = account; deletingAccountVisible = true }) { Text(tr("删除"), fontSize = 13.sp) }
+                                Button(onClick = { editingAccountId = account.id; accountEditor = true }) { Text(tr("编辑")) }
+                                Button(onClick = { deletingAccount = account; deletingAccountVisible = true }) { Text(tr("删除")) }
                             }
                         }
                     }
@@ -1210,23 +1211,26 @@ private fun SavingsApp(
     val subtle = foreground.copy(alpha = if (status) .7f else .82f)
     val base = if (status) MiuixTheme.colorScheme.primaryContainer else accent
     val fill = if (status) MiuixTheme.colorScheme.onPrimaryContainer else MiuixTheme.colorScheme.onPrimary
-    Box(Modifier.fillMaxWidth().squircleSurface(color = base, cornerRadius = 22.dp)
+    Box(Modifier.fillMaxWidth().squircleSurface(color = base, cornerRadius = 20.dp)
         .clearAndSetSemantics { contentDescription = tr("首页横幅 %s %s", featured?.title ?: tr("尚无目标"), if (completed) tr("苦尽甘来") else "${(progress * 100).toInt()}%") }) {
-        Box(Modifier.align(Alignment.TopEnd).offset(x = 28.dp, y = (-18).dp).size(134.dp), contentAlignment = Alignment.Center) {
-            if (completed) Text("🎉", fontSize = 86.sp, modifier = Modifier.graphicsLayer { alpha = .28f })
-            else Symbol("star", foreground.copy(alpha = .12f), Modifier.size(120.dp))
+        Box(Modifier.align(Alignment.TopEnd).padding(18.dp)) {
+            if (completed) Text("🎉", fontSize = 44.sp)
+            else Symbol("star", foreground.copy(alpha = .22f), Modifier.size(44.dp))
         }
-        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(featured?.title ?: tr("创建你的第一个目标"), fontSize = 26.sp,
-                fontWeight = FontWeight.Bold, color = foreground, maxLines = 2)
+        Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(tr("当前心愿"), style = MiuixTheme.textStyles.footnote1, color = subtle)
+            Text(featured?.title ?: tr("创建你的第一个目标"), style = MiuixTheme.textStyles.title2,
+                fontWeight = FontWeight.Bold, color = foreground, maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(if (featured == null) tr("先添加账户，再设定目标") else
                     "¥ ${Money.format(featured.saved(accounts))} / ¥ ${Money.format(featured.target)}",
-                    fontSize = 13.sp, color = subtle, modifier = Modifier.weight(1f))
+                    style = MiuixTheme.textStyles.footnote1, color = subtle, modifier = Modifier.weight(1f))
                 Text(if (completed) tr("苦尽甘来") else "${(progress * 100).toInt()}%",
-                    fontSize = 24.sp, fontWeight = FontWeight.Bold, color = foreground)
+                    style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold, color = foreground)
             }
-            LinearProgressIndicator(progress = progress, height = 9.dp,
+            LinearProgressIndicator(progress = progress, height = 8.dp,
                 colors = ProgressIndicatorDefaults.progressIndicatorColors(
                     foregroundColor = fill, backgroundColor = fill.copy(alpha = .20f)))
             if (featured != null) {
@@ -1234,7 +1238,7 @@ private fun SavingsApp(
                     else tr("还差 ¥ %s", Money.format(featured.remaining(accounts)))
                 Text(if (featured.deadline.isBlank()) remainingLabel
                     else tr("%s · %s", remainingLabel, featured.deadline),
-                    color = subtle, fontSize = 11.sp, maxLines = 1)
+                    color = subtle, style = MiuixTheme.textStyles.footnote2, maxLines = 1)
             }
         }
     }
@@ -1244,28 +1248,30 @@ private fun SavingsApp(
     val color = MiuixTheme.colorScheme.primary
     val progress by animateFloatAsState(goal.progress(accounts), tween(650), label = "goal-progress")
     val saved = goal.saved(accounts)
-    Panel(compact = compact) {
+    Panel {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             IconTile("star", color)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(goal.title, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-                Text(if (goal.mode == GoalMode.BALANCE) tr("按当前余额计算") else tr("从创建时开始积累"), fontSize = 11.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(goal.title, style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold, maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text(if (goal.mode == GoalMode.BALANCE) tr("按当前余额计算") else tr("从创建时开始积累"),
+                    style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
             }
             Badge(if (saved >= goal.target) tr("已达成") else tr("积累中"), color)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("¥ ${Money.format(saved)}", fontSize = 27.sp, fontWeight = FontWeight.Bold)
-                Text(tr("目标 ¥ %s", Money.format(goal.target)), fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("¥ ${Money.format(saved)}", style = MiuixTheme.textStyles.title2, fontWeight = FontWeight.Bold)
+                Text(tr("目标 ¥ %s", Money.format(goal.target)), style = MiuixTheme.textStyles.footnote1,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
             }
-            Text("${(goal.progress(accounts) * 100).toInt()}%", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = color)
+            Text("${(goal.progress(accounts) * 100).toInt()}%", style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold, color = color)
         }
-        LinearProgressIndicator(progress = progress, height = 10.dp,
+        LinearProgressIndicator(progress = progress, height = 8.dp,
             modifier = Modifier.semantics { contentDescription = tr("%s完成进度", goal.title) },
             colors = ProgressIndicatorDefaults.progressIndicatorColors(foregroundColor = color, backgroundColor = MiuixTheme.colorScheme.secondaryContainer))
         if (!compact) Text(if (saved >= goal.target) tr("心愿达成，值得为自己庆祝！") else tr("还差 ¥ %s，继续慢慢靠近。", Money.format(goal.remaining(accounts))),
-            fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         if (!compact && goal.deadline.isNotBlank()) {
             val days = runCatching { ChronoUnit.DAYS.between(LocalDate.now(), LocalDate.parse(goal.deadline)) }.getOrNull()
             val advice = when {
@@ -1278,12 +1284,12 @@ private fun SavingsApp(
             Note("${goal.deadline}  /  $advice")
         }
         val linked = accounts.filter { it.id in goal.accountIds }
-        if (!compact) Text(linked.joinToString(" · ") { it.name }, fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+        if (!compact) Text(linked.joinToString(" · ") { it.name }, style = MiuixTheme.textStyles.footnote2, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         if (!compact && goal.mode == GoalMode.GROWTH) Note(tr("起始余额 ¥ %s", Money.format(goal.baseline)))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onSync, modifier = Modifier.weight(1f)) { Text(tr("更新余额"), fontSize = 12.sp) }
-            Button(onClick = onEdit) { Text(tr("编辑"), fontSize = 12.sp) }
-            Button(onClick = onDelete) { Text(tr("删除"), fontSize = 12.sp) }
+            Button(onClick = onSync, modifier = Modifier.weight(1f)) { Text(tr("更新余额")) }
+            Button(onClick = onEdit) { Text(tr("编辑")) }
+            Button(onClick = onDelete) { Text(tr("删除")) }
         }
     }
 }
@@ -1700,10 +1706,10 @@ private class SortDragState {
     }
 }
 
-@Composable private fun Panel(compact: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
-    Card(Modifier.fillMaxWidth().animateContentSize(), cornerRadius = 20.dp) {
-        Column(Modifier.padding(if (compact) 13.dp else 16.dp),
-            verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 11.dp), content = content)
+@Composable private fun Panel(content: @Composable ColumnScope.() -> Unit) {
+    Card(Modifier.fillMaxWidth().animateContentSize(),
+        insideMargin = PaddingValues(16.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(11.dp), content = content)
     }
 }
 @Composable private fun Note(text: String) {
@@ -1726,10 +1732,10 @@ private class SortDragState {
         Column(Modifier.fillMaxWidth().padding(vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             IconTile(kind, MiuixTheme.colorScheme.primary)
-            Text(title, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Text(body, fontSize = 13.sp, lineHeight = 22.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            Text(title, style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold)
+            Text(body, style = MiuixTheme.textStyles.footnote1, lineHeight = 22.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-            Button(onClick = onClick, colors = ButtonDefaults.buttonColorsPrimary()) { Text(action, fontSize = 14.sp) }
+            Button(onClick = onClick, colors = ButtonDefaults.buttonColorsPrimary()) { Text(action) }
         }
     }
 }

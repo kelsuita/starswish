@@ -1,14 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Coin -->
+    <!-- Main star, centred in the 66dp adaptive-icon safe zone -->
     <path
-        android:fillColor="#FFD166"
-        android:pathData="M54,24 A30,30 0 1,0 54,84 A30,30 0 1,0 54,24 Z" />
-    <!-- Five-point star, kept inside the 66dp adaptive-icon safe zone -->
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M54,33 L60,47.75 L75.87,48.89 L63.7,59.15 L67.52,74.61 L54,66.2 L40.48,74.61 L44.3,59.15 L32.13,48.89 L48,47.75 Z" />
+    <!-- Small sparkle accent, keeps the composition airy -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,31 L60.4,47.4 L78,48.2 L64.1,59.3 L68.6,76.4 L54,66.6 L39.4,76.4 L43.9,59.3 L30,48.2 L47.6,47.4 Z" />
+        android:fillColor="#CCFFFFFF"
+        android:pathData="M74.5,28.3 Q75.44,32.56 79.7,33.5 Q75.44,34.44 74.5,38.7 Q73.56,34.44 69.3,33.5 Q73.56,32.56 74.5,28.3 Z" />
 </vector>
