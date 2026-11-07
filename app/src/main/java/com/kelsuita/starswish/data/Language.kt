@@ -178,6 +178,7 @@ private val Traditional = mapOf(
     "紧凑目标列表" to "緊湊目標列表",
     "进度计算方式" to "進度計算方式",
     "进度如何计算" to "進度如何計算",
+    "注意" to "注意",
     "捐助我" to "捐助我",
     "开启页面读取，同步账户余额" to "開啟頁面讀取，同步帳戶餘額",
     "开启这个心愿" to "開啟這個心願",
@@ -236,6 +237,9 @@ private val Traditional = mapOf(
     "剩余 %s 天 · 每天约 ¥ %s" to "剩餘 %s 天 · 每天約 ¥ %s",
     "识别于 %s。请核对小星页面，确认后才会更新进度。" to "辨識於 %s。請核對小星頁面，確認後才會更新進度。",
     "使用步骤" to "使用步驟",
+    "使用悬浮底栏" to "使用懸浮底欄",
+    "悬浮底栏样式" to "懸浮底欄樣式",
+    "底部导航以悬浮样式显示，横屏时同样生效" to "底部導覽以懸浮樣式顯示，橫向時同樣生效",
     "使用与小星记账完全一致的账户名称。初始余额请手动填写；之后可读取并确认更新。" to
         "使用與小星記帳完全一致的帳戶名稱。初始餘額請手動填寫；之後可讀取並確認更新。",
     "收起导航栏" to "收合導覽列",
@@ -278,6 +282,7 @@ private val Traditional = mapOf(
     "星愿，已读取，请返回星愿确认余额。点按打开账户确认页" to "星願，已讀取，請返回星願確認餘額。點按開啟帳戶確認頁",
     "星愿攒钱" to "星願攢錢",
     "星愿攒钱 · 使用说明与隐私" to "星願攢錢 · 使用說明與隱私",
+    "Kelsuita倾情出品" to "Kelsuita傾情出品",
     "修改目标名称、金额、日期不会重置起点。修改关联账户或切换计算方式时，会重新记录起点。" to
         "修改目標名稱、金額、日期不會重設起點。修改關聯帳戶或切換計算方式時，會重新記錄起點。",
     "需要 Android 13 或更高版本" to "需要 Android 13 或更新版本",
@@ -326,6 +331,16 @@ private val Traditional = mapOf(
     // Stored account sources, translated only when displayed.
     "手动录入" to "手動輸入",
     "小星页面识别 · 已确认" to "小星頁面辨識 · 已確認",
+    "预测性返回手势" to "預測性返回手勢",
+    "使用系统的预测性返回动画" to "使用系統的預測性返回動畫",
+    "关闭星愿无障碍服务" to "關閉星願無障礙服務",
+    "请在系统设置中关闭星愿的无障碍服务" to "請在系統設定中關閉星願的無障礙服務",
+    "备份中的设置无效" to "備份中的設定無效",
+    "将账户、目标、全部设置和一言保存为 JSON 文件" to "將帳戶、目標、全部設定和一言儲存為 JSON 檔案",
+    "备份文件为明文 JSON，包含账户名称与余额，请妥善保存。导入会替换现有账户、目标和全部设置，建议先导出当前数据。" to
+        "備份檔案為明文 JSON，包含帳戶名稱與餘額，請妥善保存。匯入會取代現有帳戶、目標和全部設定，建議先匯出目前資料。",
+    "备份包含 %s 个账户、%s 个目标，以及全部设置和一言。确认后将替换当前数据，无法撤销；建议先导出当前数据。" to
+        "備份包含 %s 個帳戶、%s 個目標，以及全部設定和一言。確認後將取代目前資料，無法復原；建議先匯出目前資料。",
 )
 
 private val English = mapOf(
@@ -345,7 +360,7 @@ private val English = mapOf(
     "保存账户" to "Save account",
     "备份" to "Backup",
     "备份包含 %s 个账户、%s 个目标，以及外观设置和一言。确认后将替换当前数据，无法撤销；建议先导出当前数据。" to
-        "The backup contains %s accounts, %s goals, appearance settings and the quote. Importing replaces the current data and cannot be undone; export the current data first.",
+        "The backup contains %s accounts, %s goals and appearance settings. Importing replaces the current data and cannot be undone; export the current data first.",
     "备份包含重复的账户或目标" to "The backup contains duplicate accounts or goals.",
     "备份不包含读取中的临时请求及待确认余额。无障碍服务权限由系统管理，换设备后需要重新开启。" to
         "The backup leaves out pending read requests and unconfirmed balances. The accessibility permission is managed by the system and must be granted again on a new device.",
@@ -359,7 +374,7 @@ private val English = mapOf(
     "备份已导入" to "Backup imported",
     "备份中的目标或关联账户无效" to "The backup contains an invalid goal or linked account.",
     "备份中的外观设置无效" to "The backup contains invalid appearance settings.",
-    "备份中的一言无效" to "The backup contains an invalid quote.",
+    "备份中的一言无效" to "The backup contains invalid data.",
     "备份中的账户数据无效" to "The backup contains invalid account data.",
     "编辑" to "Edit",
     "编辑心愿" to "Edit wish",
@@ -418,7 +433,7 @@ private val English = mapOf(
     "减少目标卡片的留白" to "Tighter goal cards",
     "将删除「%s」，关联账户会保留。此操作无法撤销。" to "This deletes \"%s\". Linked accounts are kept. It cannot be undone.",
     "将删除「%s」。如有目标关联此账户，请先编辑目标解除关联。" to "This deletes \"%s\". If a goal links this account, edit the goal to unlink it first.",
-    "将账户、目标、外观设置和一言保存为 JSON 文件" to "Save accounts, goals, appearance settings and the quote as a JSON file",
+    "将账户、目标、外观设置和一言保存为 JSON 文件" to "Save accounts, goals and appearance settings as a JSON file",
     "截止日期 YYYY-MM-DD（选填）" to "Deadline YYYY-MM-DD (optional)",
     "今天是计划完成日" to "Today is the planned finish date",
     "仅当你点击「读取小星余额」后，两分钟内识别指定账户详情中的名称及人民币余额。识别结果须返回本应用确认，才会更新目标。" to
@@ -430,6 +445,7 @@ private val English = mapOf(
     "紧凑目标列表" to "Compact goal list",
     "进度计算方式" to "How progress is calculated",
     "进度如何计算" to "How progress works",
+    "注意" to "Important",
     "捐助我" to "Support me",
     "开启页面读取，同步账户余额" to "Enable page reading to sync balances",
     "开启这个心愿" to "Start this wish",
@@ -487,6 +503,9 @@ private val English = mapOf(
     "剩余 %s 天 · 每天约 ¥ %s" to "%s days left · about ¥ %s a day",
     "识别于 %s。请核对小星页面，确认后才会更新进度。" to "Read at %s. Check the Xiaoxing page; progress updates only after you confirm.",
     "使用步骤" to "How to use",
+    "使用悬浮底栏" to "Use floating navigation bar",
+    "悬浮底栏样式" to "Floating bar style",
+    "底部导航以悬浮样式显示，横屏时同样生效" to "Show the bottom navigation as a floating bar, including in landscape",
     "使用与小星记账完全一致的账户名称。初始余额请手动填写；之后可读取并确认更新。" to
         "Use exactly the same account name as in Xiaoxing Ledger. Enter the starting balance by hand; afterwards you can read and confirm updates.",
     "收起导航栏" to "Collapse navigation rail",
@@ -512,7 +531,7 @@ private val English = mapOf(
     "无法写入所选文件" to "The selected file cannot be written",
     "无法写入文件" to "Cannot write the file",
     "无需登录。启用一言后，应用会在没有缓存时向一言接口请求一句话；账户、目标与已确认余额只保存在应用私有存储，不会发送给一言接口。不收集页面截图，不保存完整页面文字。卸载应用会删除数据。" to
-        "No login. When Hitokoto is enabled, the app requests one quote from the Hitokoto API when nothing is cached; accounts, goals and confirmed balances stay in private app storage and are never sent there. No page screenshots are collected and no full page text is stored. Uninstalling deletes the data.",
+        "No login. Accounts, goals and confirmed balances stay in private app storage and are never sent anywhere. No page screenshots are collected and no full page text is stored. Uninstalling deletes the data.",
     "下移" to "Move down",
     "先连接一份积累" to "Link some savings first",
     "先去添加账户" to "Add an account first",
@@ -529,6 +548,7 @@ private val English = mapOf(
     "星愿，已读取，请返回星愿确认余额。点按打开账户确认页" to "Starwish read the balance. Return to Starwish to confirm. Tap to open the confirmation page",
     "星愿攒钱" to "Starwish",
     "星愿攒钱 · 使用说明与隐私" to "Starwish · Help and privacy",
+    "Kelsuita倾情出品" to "Made by Kelsuita",
     "修改目标名称、金额、日期不会重置起点。修改关联账户或切换计算方式时，会重新记录起点。" to
         "Changing a goal's name, amount or date keeps its starting point. Changing the linked accounts or the calculation mode records a new starting point.",
     "需要 Android 13 或更高版本" to "Requires Android 13 or later",
@@ -539,8 +559,6 @@ private val English = mapOf(
     "页面读取仅在你发起后两分钟内生效，并限定为小星记账。不会自动点击、修改账单、访问银行应用或执行转账。" to
         "Page reading only works for two minutes after you start it, and only for Xiaoxing Ledger. It never taps, edits transactions, opens bank apps or transfers money.",
     "页面读取已开启 · 按需读取" to "Page reading on · read on demand",
-    "一言加载中…" to "Loading quote…",
-    "一言暂时不可用，点击重试" to "The quote is unavailable. Tap to retry.",
     "已超过计划日期，可编辑延长计划" to "Past the planned date; edit to extend it",
     "已达成" to "Reached",
     "已读取，请返回星愿" to "Balance read — return to Starwish",
@@ -577,4 +595,14 @@ private val English = mapOf(
     // Stored account sources, translated only when displayed.
     "手动录入" to "Manual entry",
     "小星页面识别 · 已确认" to "Read from Xiaoxing · confirmed",
+    "预测性返回手势" to "Predictive back gestures",
+    "使用系统的预测性返回动画" to "Use the system predictive-back animation",
+    "关闭星愿无障碍服务" to "Turn off Starwish accessibility service",
+    "请在系统设置中关闭星愿的无障碍服务" to "Turn off Starwish's accessibility service in system settings",
+    "备份中的设置无效" to "The backup contains invalid settings.",
+    "将账户、目标、全部设置和一言保存为 JSON 文件" to "Save accounts, goals, all settings and the quote as a JSON file",
+    "备份文件为明文 JSON，包含账户名称与余额，请妥善保存。导入会替换现有账户、目标和全部设置，建议先导出当前数据。" to
+        "The backup is plain JSON with account names and balances, so keep it safe. Importing replaces the current accounts, goals and all settings; export the current data first.",
+    "备份包含 %s 个账户、%s 个目标，以及全部设置和一言。确认后将替换当前数据，无法撤销；建议先导出当前数据。" to
+        "The backup contains %s accounts, %s goals and all settings. Importing replaces the current data and cannot be undone; export the current data first.",
 )

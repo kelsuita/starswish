@@ -12,9 +12,9 @@ class SavingsStore(context: Context) {
     fun saveHitokoto(value: String) = put("hitokoto", value)
 
     /**
-     * Quote (一言) switch. Null means no choice has been recorded yet; the app then stores the
-     * first-launch default derived from the resolved UI language. The preference persists when
-     * switching languages; non-Chinese UI hides the quote regardless of this value.
+     * Quote (一言) choice. Null means the user has not chosen yet, so the effective default
+     * follows the UI language (on for Chinese). A stored value is the user's explicit choice and
+     * is preserved when the language changes; non-Chinese UI hides the quote regardless.
      */
     fun quoteEnabled(): Boolean? =
         if (prefs.contains("quote_enabled")) prefs.getBoolean("quote_enabled", true) else null
@@ -45,11 +45,14 @@ class SavingsStore(context: Context) {
         prefs.getInt("palette_style", 0).coerceIn(0, 8),
         prefs.getInt("color_spec", 1).coerceIn(0, 1),
         prefs.getBoolean("blur_enabled", false),
-        prefs.getBoolean("pure_black_background", false)
+        prefs.getBoolean("pure_black_background", false),
+        prefs.getBoolean("floating_nav_bar", false),
+        prefs.getInt("floating_nav_bar_style", 0).coerceIn(0, 1),
+        prefs.getBoolean("predictive_back_enabled", true)
     )
     fun saveAppearance(value: Appearance) {
         require(value.themeMode in 0..2 && value.accentIndex in 0..5 && value.bannerStyle in 0..1 &&
-            value.paletteStyle in 0..8 && value.colorSpec in 0..1)
+            value.paletteStyle in 0..8 && value.colorSpec in 0..1 && value.floatingNavBarStyle in 0..1)
         check(prefs.edit().putInt("theme_mode", value.themeMode)
             .putInt("accent_choice", value.accentIndex)
             .putInt("banner_style", value.bannerStyle)
@@ -58,7 +61,10 @@ class SavingsStore(context: Context) {
             .putInt("palette_style", value.paletteStyle)
             .putInt("color_spec", value.colorSpec)
             .putBoolean("blur_enabled", value.blurEnabled)
-            .putBoolean("pure_black_background", value.pureBlackBackground).commit()) { tr("外观设置保存失败") }
+            .putBoolean("pure_black_background", value.pureBlackBackground)
+            .putBoolean("floating_nav_bar", value.floatingNavBar)
+            .putInt("floating_nav_bar_style", value.floatingNavBarStyle)
+            .putBoolean("predictive_back_enabled", value.predictiveBackEnabled).commit()) { tr("外观设置保存失败") }
     }
 
     @Synchronized fun exportBackup(): BackupData {
@@ -67,7 +73,8 @@ class SavingsStore(context: Context) {
             if (goals.any { it.id == value.featuredGoalId }) value else value.copy(featuredGoalId = "")
         }
         return BackupData(exportedAt = System.currentTimeMillis(), accounts = accounts(), goals = goals,
-            appearance = appearance, hitokoto = hitokoto()).validate()
+            appearance = appearance, hitokoto = hitokoto(), language = language(),
+            quoteEnabled = quoteEnabled()).validate()
     }
 
     @Synchronized fun importBackup(backup: BackupData) {
@@ -86,7 +93,13 @@ class SavingsStore(context: Context) {
             .putBoolean("compact_list", value.compactList).putInt("palette_style", value.paletteStyle)
             .putInt("color_spec", value.colorSpec).putBoolean("blur_enabled", value.blurEnabled)
             .putBoolean("pure_black_background", value.pureBlackBackground)
+            .putBoolean("floating_nav_bar", value.floatingNavBar)
+            .putInt("floating_nav_bar_style", value.floatingNavBarStyle)
+            .putBoolean("predictive_back_enabled", value.predictiveBackEnabled)
+            .putInt("language_v2", backup.language)
             .remove("capture").remove("candidate")
+        if (backup.quoteEnabled == null) editor.remove("quote_enabled")
+        else editor.putBoolean("quote_enabled", backup.quoteEnabled)
         if (backup.hitokoto == null) editor.remove("hitokoto") else editor.putString("hitokoto", backup.hitokoto)
         check(editor.commit()) { tr("备份导入保存失败，请检查可用空间") }
     }

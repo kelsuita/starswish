@@ -15,6 +15,10 @@ data class BackupData(
     val goals: List<SavingGoal>,
     val appearance: Appearance,
     val hitokoto: String? = null,
+    /** Stored language choice (0 follows system, 1 Simplified Chinese, 2 Traditional Chinese, 3 English). */
+    val language: Int = 0,
+    /** Null means no manual quote choice; the language default then applies. */
+    val quoteEnabled: Boolean? = null,
 ) {
     fun validate(): BackupData {
         require(format == "starswish-backup" && version == 1) { tr("不是支持的星愿备份文件或备份版本") }
@@ -42,10 +46,12 @@ data class BackupData(
         }
         require(appearance.themeMode in 0..2 && appearance.accentIndex in 0..5 &&
             appearance.bannerStyle in 0..1 && appearance.paletteStyle in 0..8 && appearance.colorSpec in 0..1 &&
+            appearance.floatingNavBarStyle in 0..1 &&
             (appearance.featuredGoalId.isEmpty() || appearance.featuredGoalId.length <= 128) &&
             (appearance.featuredGoalId.isEmpty() || goals.any { it.id == appearance.featuredGoalId })) {
             tr("备份中的外观设置无效")
         }
+        require(language in 0..3) { tr("备份中的设置无效") }
         require(hitokoto == null || (hitokoto.isNotBlank() && hitokoto.length <= 8192)) { tr("备份中的一言无效") }
         return this
     }

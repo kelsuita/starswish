@@ -14,4 +14,9 @@ data class Appearance(
     val colorSpec: Int = 1,
     val blurEnabled: Boolean = false,
     val pureBlackBackground: Boolean = false,
+    val floatingNavBar: Boolean = false,
+    /** 0 is the Miuix floating bar, 1 is the iOS-like floating bar. */
+    val floatingNavBarStyle: Int = 0,
+    /** Use the platform predictive-back animation for the tab pager. */
+    val predictiveBackEnabled: Boolean = true,
 )

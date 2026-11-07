@@ -7,7 +7,10 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,7 +20,12 @@ import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.rememberPagerState
@@ -37,6 +45,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
@@ -50,6 +59,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurDefaults
 import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
@@ -74,6 +84,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -173,11 +184,6 @@ class MainActivity : ComponentActivity() {
         // The language lives outside the appearance snapshot: every screen reads it through
         // Languages.tr while composing, so updating it here repaints without a restart.
         Languages.set(AppLanguage.entries[store.language()])
-        // First launch records the language-based default for the quote: on for Chinese, off
-        // elsewhere. Later language switches keep whatever the user last chose.
-        if (store.quoteEnabled() == null) {
-            runCatching { store.saveQuoteEnabled(Languages.current.isChinese) }
-        }
         setContent {
             val appearance = remember(revision) { store.appearance() }
             val dark = when (appearance.themeMode) {
@@ -236,6 +242,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@SuppressLint("NewApi")
 @Composable
 private fun SavingsApp(
     store: SavingsStore, revision: Int, refresh: () -> Unit,
@@ -259,6 +266,7 @@ private fun SavingsApp(
     // expand the rail. Content stays centred instead of stretching across a large window.
     val configuration = LocalConfiguration.current
     val wideLayout = configuration.screenWidthDp >= 600
+    val useFloatingNav = appearance.floatingNavBar
     val expandedNavigation = configuration.screenWidthDp >= 1000
     // Use the expandable rail overload so Miuix supplies its own toggle button. The width only
     // supplies the initial state; afterwards the user owns it and it survives rotation.
@@ -270,16 +278,19 @@ private fun SavingsApp(
     val layoutDirection = LocalLayoutDirection.current
     val versionName = remember { context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty() }
     var hitokoto by remember { mutableStateOf(store.hitokoto()) }
-    // The quote is a Chinese-only extra: hiding the switch for other languages also stops the
-    // request and the caption, while the stored choice is kept for a later switch back.
-    var quoteEnabled by remember { mutableStateOf(store.quoteEnabled() ?: Languages.current.isChinese) }
+    // The quote is a Chinese-only extra. A null choice follows the language default (on for
+    // Chinese); once the user toggles it, that stored choice is kept across language switches.
+    // Switching away from Chinese hides and effectively disables the quote without overwriting
+    // the user's choice, so returning to Chinese can restore it unless it was manually disabled.
+    var quoteChoice by remember { mutableStateOf(store.quoteEnabled()) }
+    val quoteEnabled = quoteChoice ?: Languages.current.isChinese
     val quoteShown = Languages.current.isChinese && quoteEnabled
     var quoteLoading by remember { mutableStateOf(false) }
-    var quoteRetry by remember { mutableIntStateOf(0) }
-    LaunchedEffect(quoteRetry, quoteShown) {
-        if (!quoteShown) return@LaunchedEffect
-        if (hitokoto == null || quoteRetry > 0) {
-            quoteLoading = true
+    // Fetches only when there is nothing cached; a manual tap refreshes regardless. Language
+    // switches and the switch itself must not replace content the user is already reading.
+    suspend fun loadQuote() {
+        quoteLoading = true
+        try {
             val fetched = fetchHitokoto()
             if (fetched != null) {
                 store.saveHitokoto(fetched)
@@ -289,8 +300,13 @@ private fun SavingsApp(
                 // treating an error message as saved content (and exporting it in backups).
                 hitokoto = tr("一言暂时不可用，点击重试")
             }
+        } finally {
             quoteLoading = false
         }
+    }
+    LaunchedEffect(quoteShown) {
+        if (!quoteShown || hitokoto != null) return@LaunchedEffect
+        loadQuote()
     }
     fun navigate(page: Int) {
         if (page >= 3) {
@@ -442,15 +458,50 @@ private fun SavingsApp(
     // Pager destinations share a single root route. Register their back handler above NavDisplay
     // so the entry's own navigation-event bridge cannot take priority over it.
     val pagerBackState = rememberNavigationEventState(NavigationEventInfo.None)
-    NavigationBackHandler(
-        state = pagerBackState,
-        isBackEnabled = backStack.size == 1 && selectedTab != 0 &&
-            !goalEditor && !accountEditor && !disclosure &&
-            !deletingGoalVisible && !deletingAccountVisible && !importVisible,
-        onBackCompleted = { navigate(0) },
-    )
-    val backProgress = (pagerBackState.transitionState as? NavigationEventTransitionState.InProgress)
-        ?.latestEvent?.progress ?: 0f
+    val pagerBackEnabled = backStack.size == 1 && selectedTab != 0 &&
+        !goalEditor && !accountEditor && !disclosure &&
+        !deletingGoalVisible && !deletingAccountVisible && !importVisible
+    if (appearance.predictiveBackEnabled) {
+        NavigationBackHandler(
+            state = pagerBackState,
+            isBackEnabled = pagerBackEnabled,
+            onBackCompleted = { navigate(0) },
+        )
+    } else {
+        // Keep normal back navigation while opting out of the predictive transition.
+        BackHandler(enabled = pagerBackEnabled) { navigate(0) }
+    }
+    val backProgress = if (appearance.predictiveBackEnabled) {
+        (pagerBackState.transitionState as? NavigationEventTransitionState.InProgress)
+            ?.latestEvent?.progress ?: 0f
+    } else 0f
+    // NavDisplay has its own predictive handler for pushed routes, and the activity can animate
+    // to home as well. When the preference is off, take over back with a plain high-priority
+    // callback so no predictive gesture starts anywhere in the app. Dialogs keep their own
+    // handlers; the pager root uses BackHandler below on older APIs.
+    val blockPredictive = !appearance.predictiveBackEnabled &&
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        !goalEditor && !accountEditor && !disclosure &&
+        !deletingGoalVisible && !deletingAccountVisible && !importVisible
+    if (blockPredictive) {
+        val activity = context as? ComponentActivity
+        DisposableEffect(activity, backStack.size, selectedTab, goalEditor, accountEditor, disclosure,
+            deletingGoalVisible, deletingAccountVisible, importVisible) {
+            val callback = OnBackInvokedCallback {
+                when {
+                    backStack.size > 1 -> backStack.removeLastOrNull()
+                    selectedTab != 0 -> navigate(0)
+                    else -> activity?.finish()
+                }
+            }
+            activity?.onBackInvokedDispatcher?.registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_OVERLAY, callback,
+            )
+            onDispose {
+                activity?.onBackInvokedDispatcher?.unregisterOnBackInvokedCallback(callback)
+            }
+        }
+    }
     // Secondary pages keep the rail visible and map back to the tab that owns them, so the
     // window-size change does not introduce a second navigation state. Tab destinations all
     // live in the pager under AppRoute(0), so only a pushed secondary route overrides the tab.
@@ -461,7 +512,7 @@ private fun SavingsApp(
         else -> 2
     } else selectedTab
     Row(Modifier.fillMaxSize()) {
-    if (wideLayout) {
+    if (wideLayout && !useFloatingNav) {
         NavigationRail(
             state = railState,
             color = pageBackground,
@@ -489,16 +540,19 @@ private fun SavingsApp(
             // the page background (obvious in the pure black dark theme).
             .background(pageBackground)
             .then(
-                if (wideLayout) {
+                when {
                     // The rail already insets the start cutout (camera end when the phone is
                     // rotated). Pad the opposite end here and consume the horizontal cutout so
                     // TopAppBar does not inset the pane a second time and push the title off the
                     // content column.
-                    Modifier
+                    wideLayout && !useFloatingNav -> Modifier
                         .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.End))
                         .consumeWindowInsets(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
-                } else {
-                    Modifier
+                    // Without the rail nothing owns the start cutout, so inset both sides.
+                    wideLayout -> Modifier
+                        .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
+                        .consumeWindowInsets(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
+                    else -> Modifier
                 },
             )
             .clipToBounds(),
@@ -506,6 +560,11 @@ private fun SavingsApp(
     // The pane width is measured (rather than derived from the rail constants) so the title can
     // line up with the centred content column even when system insets widen the rail.
     val paneWidth = maxWidth
+    // Export the complete pane once, then draw the glass bar as an overlay sibling. Keeping the
+    // bar outside the exported layer is what lets it sample the page underneath without recursion.
+    Box(
+        Modifier.fillMaxSize(),
+    ) {
     NavDisplay(
         backStack = backStack,
         modifier = Modifier.fillMaxSize(),
@@ -528,7 +587,7 @@ private fun SavingsApp(
         }
         // The bottom bar samples the pager's stable parent, not an individual page.
         // A page's layer can be detached during tab animation or a rapid second tap.
-        val bottomBackdrop = if (!wideLayout && blurActive && route.page < 3) rememberLayerBackdrop {
+        val bottomBackdrop = if (blurActive && (route.page < 3 || (wideLayout && useFloatingNav))) rememberLayerBackdrop {
             drawRect(pageBackground)
             drawContent()
         } else null
@@ -539,19 +598,45 @@ private fun SavingsApp(
         val navSelectedColor = if (appearance.accentIndex == 0) MiuixTheme.colorScheme.onBackground else accent
         Scaffold(
           bottomBar = {
-            if (!wideLayout && page < 3) {
-                Box(Modifier.fillMaxWidth()
-                    .then(if (bottomBackdrop != null) Modifier.textureBlur(bottomBackdrop, RectangleShape, BlurDefaults.BlurRadius,
-                        colors = BlurDefaults.blurColors(blendColors = listOf(BlendColorEntry(pageBackground.copy(alpha = .8f))))) else Modifier)
-                    .background(barColor)) {
-                    NavigationBar(color = barColor) {
-                        listOf(tr("首页") to NavIcons[0], tr("账户") to NavIcons[1], tr("设置") to NavIcons[2]).forEachIndexed { index, item ->
-                            // NavigationBarItem already applies weight(1f) inside its RowScope.
-                            NavigationBarItem(selected = page == index, onClick = { navigate(index) },
+            // Phones show the bar on the three tab pages only. A wide window normally uses the
+            // rail, but the floating bar replaces it and therefore stays visible on secondary
+            // pages as well, mapping the selection back to the owning tab like the rail does.
+            val showBottomBar = if (wideLayout) useFloatingNav else page < 3
+            if (showBottomBar) {
+                val navItems = listOf(tr("首页") to NavIcons[0], tr("账户") to NavIcons[1],
+                    tr("设置") to NavIcons[2])
+                val navIndex = if (wideLayout) railPage else page
+                when {
+                    !useFloatingNav -> Box(Modifier.fillMaxWidth()
+                        .then(if (bottomBackdrop != null) Modifier.textureBlur(bottomBackdrop, RectangleShape, BlurDefaults.BlurRadius,
+                            colors = BlurDefaults.blurColors(blendColors = listOf(BlendColorEntry(pageBackground.copy(alpha = .8f))))) else Modifier)
+                        .background(barColor)) {
+                        NavigationBar(color = barColor) {
+                            navItems.forEachIndexed { index, item ->
+                                // NavigationBarItem already applies weight(1f) inside its RowScope.
+                                NavigationBarItem(selected = navIndex == index, onClick = { navigate(index) },
+                                    icon = item.second, label = item.first,
+                                    colors = NavigationBarDefaults.navigationBarItemColors(selectedContentColor = navSelectedColor))
+                            }
+                        }
+                    }
+                    appearance.floatingNavBarStyle == 0 -> FloatingNavigationBar {
+                        navItems.forEachIndexed { index, item ->
+                            FloatingNavigationBarItem(selected = navIndex == index, onClick = { navigate(index) },
                                 icon = item.second, label = item.first,
                                 colors = NavigationBarDefaults.navigationBarItemColors(selectedContentColor = navSelectedColor))
                         }
                     }
+                    // The iOS-like bar lives in the entry's bottomBar, just like the Miuix
+                    // floating bar, so it participates in predictive-back scene transitions.
+                    else -> IosLiquidGlassNavigationBar(
+                        items = navItems,
+                        selectedIndex = navIndex,
+                        onItemClick = { navigate(it) },
+                        backdrop = bottomBackdrop,
+                        isBlurActive = blurActive,
+                        isDark = dark,
+                    )
                 }
             }
           },
@@ -592,15 +677,14 @@ private fun SavingsApp(
                                         layout(placeable.width, visibleHeight) { placeable.placeRelative(0, 0) }
                                     }.clipToBounds()) {
                                         val side = if (wideLayout) 32.dp else TopAppBarDefaults.TitlePadding
-                                        val caption = when {
-                                            displayedPage == 1 -> tr("绑定小星记账中的人民币储蓄账户。")
-                                            quoteShown -> if (quoteLoading && quoteRetry == 0)
-                                                tr("一言加载中…") else hitokoto ?: tr("一言加载中…")
-                                            else -> null
-                                        }
+                                        val caption = if (displayedPage == 2 && quoteShown) {
+                                            if (quoteLoading) tr("一言加载中…") else hitokoto ?: tr("一言加载中…")
+                                        } else null
                                         if (caption != null) Text(caption,
                                             modifier = Modifier.fillMaxWidth()
-                                                .then(if (displayedPage == 2) Modifier.clickable(enabled = !quoteLoading) { quoteRetry++ } else Modifier)
+                                                .then(if (displayedPage == 2) Modifier.clickable(enabled = !quoteLoading) {
+                                                    scope.launch { loadQuote() }
+                                                } else Modifier)
                                                 .padding(start = side, end = side, bottom = 8.dp),
                                             fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                                     }
@@ -707,7 +791,6 @@ private fun SavingsApp(
                     } else {
                         goals.forEach { goalCard(it) }
                     }
-                    Note(tr("目标之间独立计算；同一账户可关联多个目标，不代表资金已分开存放。"))
                 }
                 1 -> {
                     if (candidate != null) {
@@ -742,8 +825,17 @@ private fun SavingsApp(
                             Badge(if (enabled) tr("已授权") else tr("未授权"), accent)
                         }
                         Note(tr("小星暂未提供公开的余额查询接口。此功能只识别你主动打开的账户详情，需要手动确认，不会在后台实时同步。"))
-                        Button(onClick = { disclosure = true }, modifier = Modifier.fillMaxWidth()) {
-                            Text(if (enabled) tr("查看读取说明与权限") else tr("设置读取权限"))
+                        Button(onClick = {
+                            if (enabled) {
+                                openReaderSettings()
+                                notify(tr("请在系统设置中关闭星愿的无障碍服务"))
+                            } else {
+                                disclosure = true
+                            }
+                        }, modifier = Modifier.fillMaxWidth(),
+                            colors = if (enabled) ButtonDefaults.buttonColorsPrimary()
+                            else ButtonDefaults.buttonColors()) {
+                            Text(if (enabled) tr("关闭星愿无障碍服务") else tr("设置读取权限"))
                         }
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
@@ -788,7 +880,6 @@ private fun SavingsApp(
                     } else {
                         accounts.forEach { accountCard(it) }
                     }
-                    Note(tr("仅支持人民币。余额来自记账数据或手动填写，与银行实际余额可能有差异。"))
                 }
                 6 -> {
                     val goalOrder = remember(goals) { mutableStateOf(goals.map { it.id }) }
@@ -843,10 +934,14 @@ private fun SavingsApp(
                         insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
                     Card(Modifier.fillMaxWidth()) {
                         ArrowPreference(title = tr("主题设置"), summary = tr("主题、强调色、首页样式与模糊效果"), onClick = { navigate(4) })
-                        SwitchPreference(title = tr("模糊"), summary = if (android.os.Build.VERSION.SDK_INT >= 33) tr("启用顶栏和底栏的模糊效果") else tr("需要 Android 13 或更高版本"),
-                            enabled = android.os.Build.VERSION.SDK_INT >= 33,
-                            checked = appearance.blurEnabled,
-                            onCheckedChange = { value -> mutate { store.saveAppearance(appearance.copy(blurEnabled = value)) } })
+                        if (Languages.current.isChinese) {
+                            SwitchPreference(title = "启用一言", summary = "中文玩家特调",
+                                checked = quoteEnabled,
+                                onCheckedChange = { value -> mutate {
+                                    store.saveQuoteEnabled(value)
+                                    quoteChoice = value
+                                } })
+                        }
                     }
                     SmallTitle(text = tr("备份"), textColor = accent,
                         insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
@@ -865,69 +960,84 @@ private fun SavingsApp(
                     Card(Modifier.fillMaxWidth()) {
                         OverlayDropdownPreference(title = tr("主题模式"), summary = tr("选择应用的明暗模式"),
                             items = listOf(tr("跟随系统"), tr("浅色"), tr("深色")), selectedIndex = appearance.themeMode,
-                            onSelectedIndexChange = { value -> mutate { store.saveAppearance(appearance.copy(themeMode = value)) } })
+                            onSelectedIndexChange = { value -> mutate { store.saveAppearance(store.appearance().copy(themeMode = value)) } })
                         SwitchPreference(title = tr("深色模式纯黑背景"), summary = tr("仅在深色模式下使用纯黑页面背景"),
                             checked = appearance.pureBlackBackground,
-                            onCheckedChange = { value -> mutate { store.saveAppearance(appearance.copy(pureBlackBackground = value)) } })
+                            onCheckedChange = { value -> mutate { store.saveAppearance(store.appearance().copy(pureBlackBackground = value)) } })
+                        SwitchPreference(title = tr("模糊"), summary = if (android.os.Build.VERSION.SDK_INT >= 33) tr("启用顶栏和底栏的模糊效果") else tr("需要 Android 13 或更高版本"),
+                            enabled = android.os.Build.VERSION.SDK_INT >= 33,
+                            checked = appearance.blurEnabled,
+                            onCheckedChange = { value -> mutate { store.saveAppearance(store.appearance().copy(blurEnabled = value)) } })
                         OverlayDropdownPreference(title = tr("强调色"), summary = tr("选择应用强调色"),
                             items = listOf(tr("默认"), tr("莫奈取色"), tr("蓝色"), tr("绿色"), tr("橙色"), tr("紫色")),
                             selectedIndex = appearance.accentIndex,
-                            onSelectedIndexChange = { value -> mutate { store.saveAppearance(appearance.copy(accentIndex = value)) } })
-                        OverlayDropdownPreference(title = tr("调色板风格"), summary = tr("用于推导 MIUIX 调色板的色调算法"),
-                            enabled = appearance.accentIndex >= 2 || (appearance.accentIndex == 1 && monetSeed != null),
-                            items = ThemePaletteStyle.entries.map { it.name }, selectedIndex = appearance.paletteStyle,
-                            onSelectedIndexChange = { value -> mutate { store.saveAppearance(appearance.copy(paletteStyle = value)) } })
-                        OverlayDropdownPreference(title = tr("色彩规范"), summary = tr("Material 3 色彩规范版本"),
-                            enabled = appearance.accentIndex >= 2 || (appearance.accentIndex == 1 && monetSeed != null),
-                            items = listOf("2021", "2025"), selectedIndex = appearance.colorSpec,
-                            onSelectedIndexChange = { value -> mutate { store.saveAppearance(appearance.copy(colorSpec = value)) } })
+                            onSelectedIndexChange = { value -> mutate { store.saveAppearance(store.appearance().copy(accentIndex = value)) } })
+                        AnimatedVisibility(
+                            visible = appearance.accentIndex != 0,
+                            enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+                            exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
+                        ) {
+                            Column {
+                                OverlayDropdownPreference(title = tr("调色板风格"), summary = tr("用于推导 MIUIX 调色板的色调算法"),
+                                    enabled = appearance.accentIndex >= 2 || (appearance.accentIndex == 1 && monetSeed != null),
+                                    items = ThemePaletteStyle.entries.map { it.name }, selectedIndex = appearance.paletteStyle,
+                                    onSelectedIndexChange = { value -> mutate { store.saveAppearance(store.appearance().copy(paletteStyle = value)) } })
+                                OverlayDropdownPreference(title = tr("色彩规范"), summary = tr("Material 3 色彩规范版本"),
+                                    enabled = appearance.accentIndex >= 2 || (appearance.accentIndex == 1 && monetSeed != null),
+                                    items = listOf("2021", "2025"), selectedIndex = appearance.colorSpec,
+                                    onSelectedIndexChange = { value -> mutate { store.saveAppearance(store.appearance().copy(colorSpec = value)) } })
+                            }
+                        }
+                        SwitchPreference(title = tr("使用悬浮底栏"), summary = tr("底部导航以悬浮样式显示，横屏时同样生效"),
+                            checked = appearance.floatingNavBar,
+                            onCheckedChange = { value -> mutate { store.saveAppearance(store.appearance().copy(floatingNavBar = value)) } })
+                        AnimatedVisibility(visible = appearance.floatingNavBar) {
+                            Column {
+                                OverlayDropdownPreference(title = tr("悬浮底栏样式"),
+                                    items = listOf("miuix", "iOS-like"), selectedIndex = appearance.floatingNavBarStyle,
+                                    onSelectedIndexChange = { value -> mutate { store.saveAppearance(store.appearance().copy(floatingNavBarStyle = value)) } })
+                            }
+                        }
                     }
                     SmallTitle(text = tr("首页"), textColor = accent,
                         insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
                     Card(Modifier.fillMaxWidth()) {
                         OverlayDropdownPreference(title = tr("首页横幅"), items = listOf(tr("浅色"), tr("深色")),
                             selectedIndex = appearance.bannerStyle,
-                            onSelectedIndexChange = { value -> mutate { store.saveAppearance(appearance.copy(bannerStyle = value)) } })
+                            onSelectedIndexChange = { value -> mutate { store.saveAppearance(store.appearance().copy(bannerStyle = value)) } })
                         if (goals.isNotEmpty()) OverlayDropdownPreference(title = tr("横幅目标"),
                             items = listOf(tr("自动选择")) + goals.map { it.title },
                             selectedIndex = goals.indexOfFirst { it.id == appearance.featuredGoalId }.let { if (it < 0) 0 else it + 1 },
-                            onSelectedIndexChange = { value -> mutate { store.saveAppearance(appearance.copy(featuredGoalId = if (value == 0) "" else goals[value - 1].id)) } })
+                            onSelectedIndexChange = { value -> mutate { store.saveAppearance(store.appearance().copy(featuredGoalId = if (value == 0) "" else goals[value - 1].id)) } })
                         SwitchPreference(title = tr("紧凑目标列表"), summary = tr("减少目标卡片的留白"),
                             checked = appearance.compactList,
-                            onCheckedChange = { value -> mutate { store.saveAppearance(appearance.copy(compactList = value)) } })
-                    }
-                    // The quote is a Chinese-only extra, so the whole section is hidden rather than
-                    // shown disabled in other languages. Its copy intentionally stays untranslated.
-                    if (Languages.current.isChinese) {
-                        SmallTitle(text = "一言", textColor = accent,
-                            insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
-                        Card(Modifier.fillMaxWidth()) {
-                            SwitchPreference(title = "启用一言", summary = "中文玩家特调",
-                                checked = quoteEnabled,
-                                onCheckedChange = { value -> mutate {
-                                    store.saveQuoteEnabled(value)
-                                    quoteEnabled = value
-                                } })
-                        }
+                            onCheckedChange = { value -> mutate { store.saveAppearance(store.appearance().copy(compactList = value)) } })
+                        SwitchPreference(title = tr("预测性返回手势"), summary = tr("使用系统的预测性返回动画"),
+                            checked = appearance.predictiveBackEnabled,
+                            onCheckedChange = { value -> mutate { store.saveAppearance(store.appearance().copy(predictiveBackEnabled = value)) } })
                     }
                 }
                 5 -> {
                     Card(Modifier.fillMaxWidth()) {
-                        ArrowPreference(title = tr("导出备份"), summary = tr("将账户、目标、外观设置和一言保存为 JSON 文件"),
+                        ArrowPreference(title = tr("导出备份"), summary = tr("将账户、目标、全部设置和一言保存为 JSON 文件"),
                             enabled = !backupBusy, onClick = {
                                 exportLauncher.launch("starswish-backup-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(Date())}.json")
                             })
                         ArrowPreference(title = tr("导入备份"), summary = tr("选择 JSON 备份，确认后替换现有数据"),
                             enabled = !backupBusy, onClick = { importLauncher.launch(arrayOf("application/json", "text/*", "application/octet-stream")) })
                     }
-                    Note(if (backupBusy) tr("正在处理备份，请稍候…") else tr("备份文件为明文 JSON，包含账户名称与余额，请妥善保存。导入会替换现有账户、目标和外观设置，建议先导出当前数据。"))
-                    Note(tr("备份不包含读取中的临时请求及待确认余额。无障碍服务权限由系统管理，换设备后需要重新开启。"))
+                    if (backupBusy) Note(tr("正在处理备份，请稍候…"))
+                    Panel {
+                        Text(tr("注意"), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Note(tr("备份文件为明文 JSON，包含账户名称与余额，请妥善保存。导入会替换现有账户、目标和全部设置，建议先导出当前数据。"))
+                        Note(tr("备份不包含读取中的临时请求及待确认余额。无障碍服务权限由系统管理，换设备后需要重新开启。"))
+                    }
                 }
                 3 -> {
                     Panel {
                         IconTile("star", accent)
                         Text(tr("星愿攒钱"), fontWeight = FontWeight.Bold, fontSize = 24.sp)
-                        Text("$versionName  /  Made by Kelsuita & GPT6", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                        Text("$versionName  /  ${tr("Kelsuita倾情出品")}", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                     }
                     Card(Modifier.fillMaxWidth()) {
                         ArrowPreference(title = tr("Github链接"), summary = tr("查看项目，更新应用，看看Kelsuita在偷懒吗。"), onClick = {
@@ -997,13 +1107,15 @@ private fun SavingsApp(
                 onDismiss = { if (!backupBusy) importVisible = false },
                 onDismissFinished = { pendingBackupJson = null; finished() },
             ) {
-                Note(tr("备份包含 %s 个账户、%s 个目标，以及外观设置和一言。确认后将替换当前数据，无法撤销；建议先导出当前数据。", backup.accounts.size, backup.goals.size))
+                Note(tr("备份包含 %s 个账户、%s 个目标，以及全部设置和一言。确认后将替换当前数据，无法撤销；建议先导出当前数据。", backup.accounts.size, backup.goals.size))
                 Button(onClick = {
                     scope.launch {
                         backupBusy = true
                         try {
                             withContext(Dispatchers.IO) { store.importBackup(backup) }
                             hitokoto = backup.hitokoto
+                            quoteChoice = backup.quoteEnabled
+                            Languages.set(AppLanguage.entries[backup.language])
                             importVisible = false
                             refresh()
                             notify(tr("备份已导入"))
@@ -1087,6 +1199,7 @@ private fun SavingsApp(
         }
     }
 }
+}
 
 @Composable private fun Overview(goals: List<SavingGoal>, accounts: List<BankAccount>, appearance: Appearance, accent: Color) {
     val featured = goals.firstOrNull { it.id == appearance.featuredGoalId } ?: goals.firstOrNull()
@@ -1104,9 +1217,8 @@ private fun SavingsApp(
             else Symbol("star", foreground.copy(alpha = .12f), Modifier.size(120.dp))
         }
         Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(tr("攒钱进度 · %s 个目标", goals.size), fontSize = 12.sp, color = subtle)
-            Text(featured?.title ?: tr("创建你的第一个目标"), fontSize = 22.sp,
-                fontWeight = FontWeight.SemiBold, color = foreground, maxLines = 2)
+            Text(featured?.title ?: tr("创建你的第一个目标"), fontSize = 26.sp,
+                fontWeight = FontWeight.Bold, color = foreground, maxLines = 2)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(if (featured == null) tr("先添加账户，再设定目标") else
                     "¥ ${Money.format(featured.saved(accounts))} / ¥ ${Money.format(featured.target)}",
@@ -1117,10 +1229,13 @@ private fun SavingsApp(
             LinearProgressIndicator(progress = progress, height = 9.dp,
                 colors = ProgressIndicatorDefaults.progressIndicatorColors(
                     foregroundColor = fill, backgroundColor = fill.copy(alpha = .20f)))
-            if (featured != null) Text(tr("%s · %s",
-                if (featured.remaining(accounts) == 0L) tr("目标已达成") else tr("还差 ¥ %s", Money.format(featured.remaining(accounts))),
-                if (featured.deadline.isBlank()) tr("未设截止日期") else featured.deadline),
-                color = subtle, fontSize = 11.sp, maxLines = 1)
+            if (featured != null) {
+                val remainingLabel = if (featured.remaining(accounts) == 0L) tr("目标已达成")
+                    else tr("还差 ¥ %s", Money.format(featured.remaining(accounts)))
+                Text(if (featured.deadline.isBlank()) remainingLabel
+                    else tr("%s · %s", remainingLabel, featured.deadline),
+                    color = subtle, fontSize = 11.sp, maxLines = 1)
+            }
         }
     }
 }

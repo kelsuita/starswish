@@ -8,8 +8,11 @@ class BackupDataTest {
     private fun backup() = BackupData(exportedAt = 1,
         accounts = listOf(BankAccount("account", "储蓄账户", 123456, 1)),
         goals = listOf(SavingGoal("goal", "旅行", 500000, setOf("account"), GoalMode.GROWTH, 100000, "2027-01-01")),
-        appearance = Appearance(themeMode = 2, featuredGoalId = "goal", pureBlackBackground = true),
-        hitokoto = "慢慢来，比较快。")
+        appearance = Appearance(themeMode = 2, featuredGoalId = "goal", pureBlackBackground = true,
+            predictiveBackEnabled = false),
+        hitokoto = "慢慢来，比较快。",
+        language = 3,
+        quoteEnabled = false)
 
     @Test fun roundTripPreservesDataAndMoney() {
         val original = backup()
@@ -48,6 +51,13 @@ class BackupDataTest {
         }
     }
 
+    @Test fun backupIncludesAllSettings() {
+        val json = backup().toJson()
+        assertTrue(json.contains("\"language\": 3"))
+        assertTrue(json.contains("\"quoteEnabled\": false"))
+        assertTrue(json.contains("\"predictiveBackEnabled\": false"))
+    }
+
     @Test fun invalidBackupsAreRejected() {
         val original = backup()
         listOf(
@@ -59,6 +69,7 @@ class BackupDataTest {
             original.copy(goals = listOf(original.goals.first().copy(deadline = "2027-13-30"))),
             original.copy(appearance = Appearance(accentIndex = 10)),
             original.copy(appearance = Appearance(featuredGoalId = "missing")),
+            original.copy(language = 4),
         ).forEach { value -> assertThrows(IllegalArgumentException::class.java) { value.toJson() } }
         assertThrows(IllegalArgumentException::class.java) { BackupData.fromJson("{}") }
         assertThrows(IllegalArgumentException::class.java) { BackupData.fromJson("x".repeat(BackupData.MAX_BYTES + 1)) }
