@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">星愿攒钱</string>
+    <string name="accessibility_service_name">星愿攒钱 · 读取小星账户</string>
+    <string name="accessibility_description">仅当你在星愿攒钱中点击“读取小星余额”后，在两分钟内读取小星记账账户详情页可见的账户名称和人民币余额。结果需要你返回星愿攒钱确认才会更新。不会读取其他应用，不会执行点击、记账或转账，数据只保存在本机。可随时在系统设置关闭。</string>
+</resources>

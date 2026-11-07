@@ -30,7 +30,7 @@ background sync, no transaction history is read, and nothing is confirmed on you
 
 ## Download
 
-Current release: [Starwish Argenti 1.5.0](https://github.com/kelsuita/starswish/releases/tag/v1.5.0)
+Current release: [Starwish Argenti 1.5.0 Hotfix](https://github.com/kelsuita/starswish/releases/tag/v1.5.0-hotfix)
 
 - `app-universal-release.apk`: universal package, choose this if you are unsure about the ABI
 - `app-armeabi-v7a-release.apk`: 32-bit ARM devices

@@ -18,8 +18,8 @@ android {
         applicationId = "com.kelsuita.starswish"
         minSdk = 26
         targetSdk = 36
-        versionCode = 13
-        versionName = "Argenti 1.5.0"
+        versionCode = 14
+        versionName = "Argenti 1.5.0 Hotfix"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     splits {

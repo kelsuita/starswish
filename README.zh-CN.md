@@ -18,7 +18,7 @@
 
 ## 下载
 
-当前发布版本：[星愿攒钱 Argenti 1.5.0](https://github.com/kelsuita/starswish/releases/tag/v1.5.0)
+当前发布版本：[星愿攒钱 Argenti 1.5.0 Hotfix](https://github.com/kelsuita/starswish/releases/tag/v1.5.0-hotfix)
 
 - `app-universal-release.apk`：通用架构包，不确定设备架构时选择此包
 - `app-armeabi-v7a-release.apk`：32 位 ARM 设备
