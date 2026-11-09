@@ -19,20 +19,20 @@ class SavingsStore(context: Context) {
     fun quoteEnabled(): Boolean? =
         if (prefs.contains("quote_enabled")) prefs.getBoolean("quote_enabled", true) else null
     fun saveQuoteEnabled(value: Boolean) {
-        check(prefs.edit().putBoolean("quote_enabled", value).commit()) { tr("保存失败") }
+        check(prefs.edit().putBoolean("quote_enabled", value).commit()) { tr("common.save_failed") }
     }
 
-    /** UI language index: 0 follows the system, 1 simplified Chinese, 2 traditional Chinese, 3 English. */
+    /** UI language index: an index into [AppLanguage.entries]. */
     fun language(): Int {
-        if (prefs.contains("language_v2")) return prefs.getInt("language_v2", 0).coerceIn(0, 3)
+        if (prefs.contains("language_v2")) return prefs.getInt("language_v2", 0).coerceIn(0, AppLanguage.entries.lastIndex)
         // Builds before the follow-system option stored 0..2 directly; shift those by one so an
         // explicit choice survives the update instead of silently becoming "follow system".
         val legacy = if (prefs.contains("language")) prefs.getInt("language", 1) else -1
         return if (legacy in 0..2) legacy + 1 else 0
     }
     fun saveLanguage(value: Int) {
-        require(value in 0..3)
-        check(prefs.edit().putInt("language_v2", value).commit()) { tr("语言设置保存失败") }
+        require(value in AppLanguage.entries.indices)
+        check(prefs.edit().putInt("language_v2", value).commit()) { tr("settings.language_save_failed") }
     }
 
     fun appearance(): Appearance = Appearance(
@@ -64,7 +64,7 @@ class SavingsStore(context: Context) {
             .putBoolean("pure_black_background", value.pureBlackBackground)
             .putBoolean("floating_nav_bar", value.floatingNavBar)
             .putInt("floating_nav_bar_style", value.floatingNavBarStyle)
-            .putBoolean("predictive_back_enabled", value.predictiveBackEnabled).commit()) { tr("外观设置保存失败") }
+            .putBoolean("predictive_back_enabled", value.predictiveBackEnabled).commit()) { tr("settings.appearance_save_failed") }
     }
 
     @Synchronized fun exportBackup(): BackupData {
@@ -101,7 +101,7 @@ class SavingsStore(context: Context) {
         if (backup.quoteEnabled == null) editor.remove("quote_enabled")
         else editor.putBoolean("quote_enabled", backup.quoteEnabled)
         if (backup.hitokoto == null) editor.remove("hitokoto") else editor.putString("hitokoto", backup.hitokoto)
-        check(editor.commit()) { tr("备份导入保存失败，请检查可用空间") }
+        check(editor.commit()) { tr("backup.error_import_save") }
     }
 
     @Synchronized fun accounts(): List<BankAccount> = readArray("accounts").let { array ->
@@ -109,7 +109,7 @@ class SavingsStore(context: Context) {
             runCatching {
                 array.getJSONObject(i).let {
                     BankAccount(it.getString("id"), it.getString("name"), it.getLong("balance"),
-                        it.getLong("updatedAt"), it.optString("source", "手动录入"), it.optLong("createdAt", i.toLong() + 1))
+                        it.getLong("updatedAt"), it.optString("source", "account.source_manual"), it.optLong("createdAt", i.toLong() + 1))
                 }
             }.getOrNull()
         }
@@ -132,8 +132,8 @@ class SavingsStore(context: Context) {
         require(account.name.isNotBlank() && account.name.length <= 40)
         require(account.balance in -Money.MAX_CENTS..Money.MAX_CENTS)
         val existing = accounts()
-        require(existing.none { it.id != account.id && it.name == account.name }) { tr("账户名称已存在") }
-        require(existing.any { it.id == account.id } || existing.size < 50) { tr("最多添加 50 个账户") }
+        require(existing.none { it.id != account.id && it.name == account.name }) { tr("account.error_name_exists") }
+        require(existing.any { it.id == account.id } || existing.size < 50) { tr("account.error_max_accounts") }
         writeAccounts(existing.map { if (it.id == account.id) account.copy(createdAt = it.createdAt) else it }
             .let { if (existing.any { it.id == account.id }) it else it + account.copy(createdAt = System.currentTimeMillis()) })
     }
@@ -142,7 +142,7 @@ class SavingsStore(context: Context) {
         require(goal.target in 1..Money.MAX_CENTS && goal.accountIds.isNotEmpty())
         require(goal.accountIds.all { id -> accounts().any { it.id == id } })
         val existing = goals()
-        require(existing.any { it.id == goal.id } || existing.size < 100) { tr("最多添加 100 个目标") }
+        require(existing.any { it.id == goal.id } || existing.size < 100) { tr("goal.error_max_goals") }
         put("goals", JSONArray().apply {
             existing.map { if (it.id == goal.id) goal.copy(createdAt = it.createdAt) else it }
                 .let { if (existing.any { it.id == goal.id }) it else it + goal.copy(createdAt = System.currentTimeMillis()) }
@@ -168,10 +168,10 @@ class SavingsStore(context: Context) {
         // A dangling featured id would leave the home banner falling back to the first goal,
         // while settings still highlighted a missing entry.
         if (prefs.getString("featured_goal", "") == id) editor.putString("featured_goal", "")
-        check(editor.commit()) { tr("保存失败，请检查可用空间") }
+        check(editor.commit()) { tr("common.save_failed_space") }
     }
     @Synchronized fun deleteAccount(id: String) {
-        require(goals().none { id in it.accountIds }) { tr("请先在关联目标中解除该账户") }
+        require(goals().none { id in it.accountIds }) { tr("account.error_unlink_first") }
         writeAccounts(accounts().filterNot { it.id == id })
         if (candidate()?.accountId == id) clearCandidate()
         if (request()?.accountId == id) cancelCapture()
@@ -200,16 +200,16 @@ class SavingsStore(context: Context) {
     fun clearCandidate() { check(prefs.edit().remove("candidate").commit()) }
     @Synchronized fun acceptCandidate() {
         val candidate = candidate() ?: return
-        val account = accounts().firstOrNull { it.id == candidate.accountId } ?: error(tr("该账户已删除"))
+        val account = accounts().firstOrNull { it.id == candidate.accountId } ?: error(tr("account.error_deleted"))
         val updated = accounts().map {
             if (it.id == account.id) it.copy(balance = candidate.balance, updatedAt = candidate.capturedAt,
-                source = "小星页面识别 · 已确认") else it
+                source = "account.source_xiaoxing") else it
         }
         check(prefs.edit().putString("accounts", accountsJson(updated).toString()).remove("candidate").commit())
     }
     private fun readArray(key: String): JSONArray = runCatching { JSONArray(prefs.getString(key, "[]")) }
         .getOrElse { JSONArray() }
-    private fun put(key: String, value: String) { check(prefs.edit().putString(key, value).commit()) { tr("保存失败，请检查可用空间") } }
+    private fun put(key: String, value: String) { check(prefs.edit().putString(key, value).commit()) { tr("common.save_failed_space") } }
     private fun writeAccounts(accounts: List<BankAccount>) = put("accounts", accountsJson(accounts).toString())
     private fun accountsJson(accounts: List<BankAccount>) = JSONArray().apply {
         accounts.forEach { put(JSONObject().put("id", it.id).put("name", it.name)

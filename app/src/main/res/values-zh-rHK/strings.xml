@@ -1,5 +1,0 @@
-<resources>
-    <string name="app_name">星願攢錢</string>
-    <string name="accessibility_service_name">星願攢錢 · 讀取小星帳戶</string>
-    <string name="accessibility_description">僅當你在星願攢錢中點擊「讀取小星餘額」後，在兩分鐘內讀取小星記帳帳戶詳情頁可見的帳戶名稱和人民幣餘額。結果需要你返回星願攢錢確認才會更新。不會讀取其他應用程式，不會執行點擊、記帳或轉帳，資料只保存在本機。可隨時在系統設定關閉。</string>
-</resources>

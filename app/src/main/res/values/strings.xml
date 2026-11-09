@@ -1,5 +1,0 @@
-<resources>
-    <string name="app_name">Starwish</string>
-    <string name="accessibility_service_name">Starwish · Read Xiaoxing accounts</string>
-    <string name="accessibility_description">After you tap “Read Xiaoxing balance” in Starwish, reads the account name and CNY balance visible on the Xiaoxing Ledger account detail page within two minutes. The result is only applied after you return to Starwish and confirm. It does not read other apps, tap, record transactions or transfer money, and the data stays on this device. You can turn it off in system settings at any time.</string>
-</resources>

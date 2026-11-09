@@ -69,7 +69,7 @@ class BackupDataTest {
             original.copy(goals = listOf(original.goals.first().copy(deadline = "2027-13-30"))),
             original.copy(appearance = Appearance(accentIndex = 10)),
             original.copy(appearance = Appearance(featuredGoalId = "missing")),
-            original.copy(language = 4),
+            original.copy(language = AppLanguage.entries.size),
         ).forEach { value -> assertThrows(IllegalArgumentException::class.java) { value.toJson() } }
         assertThrows(IllegalArgumentException::class.java) { BackupData.fromJson("{}") }
         assertThrows(IllegalArgumentException::class.java) { BackupData.fromJson("x".repeat(BackupData.MAX_BYTES + 1)) }
@@ -80,6 +80,6 @@ class BackupDataTest {
         val versionError = assertThrows(IllegalArgumentException::class.java) {
             BackupData.fromJson(badVersion)
         }
-        assertTrue(versionError.message.orEmpty().contains("不是支持的星愿备份文件"))
+        assertTrue(versionError.message.orEmpty().contains("backup.error_unsupported"))
     }
 }

@@ -21,15 +21,15 @@ data class BackupData(
     val quoteEnabled: Boolean? = null,
 ) {
     fun validate(): BackupData {
-        require(format == "starswish-backup" && version == 1) { tr("不是支持的星愿备份文件或备份版本") }
-        require(exportedAt >= 0 && accounts.size <= 50 && goals.size <= 100) { tr("备份数据超出限制") }
+        require(format == "starswish-backup" && version == 1) { tr("backup.error_unsupported") }
+        require(exportedAt >= 0 && accounts.size <= 50 && goals.size <= 100) { tr("backup.error_too_large") }
         require(accounts.map { it.id }.distinct().size == accounts.size &&
             accounts.map { it.name }.distinct().size == accounts.size &&
-            goals.map { it.id }.distinct().size == goals.size) { tr("备份包含重复的账户或目标") }
+            goals.map { it.id }.distinct().size == goals.size) { tr("backup.error_duplicates") }
         accounts.forEach {
             require(it.id.isNotBlank() && it.id.length <= 128 && it.name.isNotBlank() && it.name.length <= 40 &&
                 it.balance in -Money.MAX_CENTS..Money.MAX_CENTS && it.updatedAt >= 0 && it.createdAt >= 0 && it.source.length <= 200) {
-                tr("备份中的账户数据无效")
+                tr("backup.error_accounts")
             }
         }
         val accountIds = accounts.map { it.id }.toSet()
@@ -41,7 +41,7 @@ data class BackupData(
                 it.baseline in -(50 * Money.MAX_CENTS)..(50 * Money.MAX_CENTS) &&
                 it.colorIndex >= 0 && it.createdAt >= 0 && (it.deadline.isEmpty() ||
                 (it.deadline.length == 10 && runCatching { LocalDate.parse(it.deadline) }.isSuccess))) {
-                tr("备份中的目标或关联账户无效")
+                tr("backup.error_goal_or_account")
             }
         }
         require(appearance.themeMode in 0..2 && appearance.accentIndex in 0..5 &&
@@ -49,10 +49,10 @@ data class BackupData(
             appearance.floatingNavBarStyle in 0..1 &&
             (appearance.featuredGoalId.isEmpty() || appearance.featuredGoalId.length <= 128) &&
             (appearance.featuredGoalId.isEmpty() || goals.any { it.id == appearance.featuredGoalId })) {
-            tr("备份中的外观设置无效")
+            tr("backup.error_appearance")
         }
-        require(language in 0..3) { tr("备份中的设置无效") }
-        require(hitokoto == null || (hitokoto.isNotBlank() && hitokoto.length <= 8192)) { tr("备份中的一言无效") }
+        require(language in AppLanguage.entries.indices) { tr("backup.error_settings") }
+        require(hitokoto == null || (hitokoto.isNotBlank() && hitokoto.length <= 8192)) { tr("backup.error_quote") }
         return this
     }
 
@@ -63,11 +63,11 @@ data class BackupData(
         private val codec = Json { prettyPrint = true; encodeDefaults = true }
 
         fun fromJson(text: String): BackupData {
-            require(text.toByteArray(Charsets.UTF_8).size <= MAX_BYTES) { tr("备份文件不能超过 1 MB") }
+            require(text.toByteArray(Charsets.UTF_8).size <= MAX_BYTES) { tr("backup.error_over_1mb") }
             val decoded = try {
                 codec.decodeFromString<BackupData>(text.removePrefix("\uFEFF"))
             } catch (error: SerializationException) {
-                throw IllegalArgumentException(tr("备份格式或内容无效，请选择星愿导出的 JSON 文件"), error)
+                throw IllegalArgumentException(tr("backup.error_invalid_file"), error)
             }
             // Validation messages are already written for the user; do not replace them with
             // the generic parse error above.

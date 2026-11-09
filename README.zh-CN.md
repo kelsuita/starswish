@@ -1,6 +1,6 @@
 # 星愿攒钱
 
-[English](README.md) · **简体中文** · [繁體中文](README.zh-TW.md)
+[English](README.md) · **简体中文** · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md)
 
 > 把想买的东西写下来，看着它一点点变成现实。
 
@@ -18,7 +18,7 @@
 
 ## 下载
 
-当前发布版本：[星愿攒钱 Argenti 1.5.0 Hotfix](https://github.com/kelsuita/starswish/releases/tag/v1.5.0-hotfix)
+当前发布版本：[星愿攒钱 Synesthesia Beacon 1.5.5](https://github.com/kelsuita/starswish/releases/tag/v1.5.5)
 
 - `app-universal-release.apk`：通用架构包，不确定设备架构时选择此包
 - `app-armeabi-v7a-release.apk`：32 位 ARM 设备
@@ -202,6 +202,16 @@ app/src/main/java/com/kelsuita/starswish/
 app/src/test/                          核心逻辑单元测试
 tools/                                 构建与隔离模拟器验证脚本
 ```
+
+### 语言包
+
+所有界面文案都使用稳定标识符（如 `home.current_wish`），具体文字放在
+`app/src/main/assets/i18n/`（`en`、`zh-CN`、`zh-TW`、`ja`）。新增或修改翻译只需改这些文件，无需改动 Kotlin；
+扁平的点号 key 可直接上传到 Crowdin。缺失的 key 会回退到英文，再回退到标识符本身。应用名与无障碍
+服务名称/描述也会在构建时从同一份语言包生成到 Android 资源，因为 Android 会在应用启动前读取它们。
+新增一门语言时，把 `<语言代码>.json`（可复制 `en.json`）放进同一目录，再在 `Language.kt` 的
+`AppLanguage` 末尾追加一项即可；资源目录、跟随系统匹配和语言序号范围都会自动处理，且必须追加在末尾，
+因为旧数据按枚举序号保存语言选择。
 
 同一账户可以用于多个独立目标；这不会自动分配资金或实际划款。首页横幅只展示一个指定目标的进度（默认第一个）。修改目标名称、金额或日期不会重置起点；修改关联账户或计算模式会重设起点。
 

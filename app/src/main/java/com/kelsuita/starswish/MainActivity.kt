@@ -298,7 +298,7 @@ private fun SavingsApp(
             } else if (hitokoto == null) {
                 // Keep the failure in memory only: the next launch should retry instead of
                 // treating an error message as saved content (and exporting it in backups).
-                hitokoto = tr("一言暂时不可用，点击重试")
+                hitokoto = tr("settings.quote_unavailable")
             }
         } finally {
             quoteLoading = false
@@ -384,7 +384,7 @@ private fun SavingsApp(
         }
     }
     fun mutate(block: () -> Unit): Boolean = runCatching { block(); refresh(); true }
-        .getOrElse { notify(it.message ?: tr("操作失败，请重试")); false }
+        .getOrElse { notify(it.message ?: tr("common.operation_failed")); false }
     // Reordering is visually complete before this runs. Persist it on a background thread so
     // the synchronous SharedPreferences commit cannot stall the frame after the card settles.
     fun commitSortOrder(previous: List<String>, write: () -> Unit, restore: (List<String>) -> Unit) {
@@ -394,7 +394,7 @@ private fun SavingsApp(
             }
             if (result.isSuccess) refresh() else {
                 restore(previous)
-                notify(result.exceptionOrNull()?.message ?: tr("操作失败，请重试"))
+                notify(result.exceptionOrNull()?.message ?: tr("common.operation_failed"))
             }
         }
     }
@@ -405,13 +405,13 @@ private fun SavingsApp(
             try {
                 val text = withContext(Dispatchers.IO) { store.exportBackup().toJson() }
                 withContext(Dispatchers.IO) {
-                    checkNotNull(context.contentResolver.openOutputStream(uri, "wt")) { tr("无法写入所选文件") }
+                    checkNotNull(context.contentResolver.openOutputStream(uri, "wt")) { tr("backup.error_write_selected") }
                         .bufferedWriter(Charsets.UTF_8).use { it.write(text) }
                 }
-                notify(tr("备份已导出"))
+                notify(tr("backup.exported"))
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
-                notify(tr("导出失败：%s", error.message ?: tr("无法写入文件")))
+                notify(tr("backup.export_failed", error.message ?: tr("backup.error_write")))
             } finally { backupBusy = false }
         }
     }
@@ -420,25 +420,25 @@ private fun SavingsApp(
             backupBusy = true
             try {
                 pendingBackupJson = withContext(Dispatchers.IO) {
-                    val bytes = checkNotNull(context.contentResolver.openInputStream(uri)) { tr("无法读取所选文件") }
+                    val bytes = checkNotNull(context.contentResolver.openInputStream(uri)) { tr("backup.error_read_selected") }
                         .use { input ->
                             val output = java.io.ByteArrayOutputStream()
                             val buffer = ByteArray(8192)
                             while (true) {
                                 val count = input.read(buffer)
                                 if (count < 0) break
-                                require(output.size() + count <= BackupData.MAX_BYTES) { tr("备份文件不能超过 1 MB") }
+                                require(output.size() + count <= BackupData.MAX_BYTES) { tr("backup.error_over_1mb") }
                                 output.write(buffer, 0, count)
                             }
                             output.toByteArray()
                         }
-                    require(bytes.size <= BackupData.MAX_BYTES) { tr("备份文件不能超过 1 MB") }
+                    require(bytes.size <= BackupData.MAX_BYTES) { tr("backup.error_over_1mb") }
                     BackupData.fromJson(bytes.toString(Charsets.UTF_8)).toJson()
                 }
                 importVisible = true
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
-                notify(tr("导入失败：%s", error.message ?: tr("无法读取文件")))
+                notify(tr("backup.import_failed", error.message ?: tr("backup.error_read")))
             } finally { backupBusy = false }
         }
     }
@@ -447,8 +447,8 @@ private fun SavingsApp(
         if (mutate { store.startCapture(account.id) }) {
             if (!openXiaoxing()) {
                 mutate { store.cancelCapture() }
-                notify(tr("未找到小星记账，请先安装后重试"))
-            } else notify(tr("请打开「%s」的账户详情页，显示余额后返回星愿确认", account.name))
+                notify(tr("accessibility.error_xiaoxing_missing"))
+            } else notify(tr("accessibility.open_account_page", account.name))
         }
     }
     val accent = MiuixTheme.colorScheme.primary
@@ -517,10 +517,10 @@ private fun SavingsApp(
             state = railState,
             color = pageBackground,
             showDivider = true,
-            expandContentDescription = tr("展开导航栏"),
-            collapseContentDescription = tr("收起导航栏"),
+            expandContentDescription = tr("nav.expand"),
+            collapseContentDescription = tr("nav.collapse"),
         ) {
-            listOf(tr("首页") to NavIcons[0], tr("账户") to NavIcons[1], tr("设置") to NavIcons[2]).forEachIndexed { index, item ->
+            listOf(tr("nav.home") to NavIcons[0], tr("account.title") to NavIcons[1], tr("settings.title") to NavIcons[2]).forEachIndexed { index, item ->
                 NavigationRailItem(
                     selected = railPage == index,
                     onClick = { navigate(index) },
@@ -603,8 +603,8 @@ private fun SavingsApp(
             // pages as well, mapping the selection back to the owning tab like the rail does.
             val showBottomBar = if (wideLayout) useFloatingNav else page < 3
             if (showBottomBar) {
-                val navItems = listOf(tr("首页") to NavIcons[0], tr("账户") to NavIcons[1],
-                    tr("设置") to NavIcons[2])
+                val navItems = listOf(tr("nav.home") to NavIcons[0], tr("account.title") to NavIcons[1],
+                    tr("settings.title") to NavIcons[2])
                 val navIndex = if (wideLayout) railPage else page
                 when {
                     !useFloatingNav -> Box(Modifier.fillMaxWidth()
@@ -657,7 +657,7 @@ private fun SavingsApp(
                     colors = BlurDefaults.blurColors(blendColors = listOf(BlendColorEntry(pageBackground.copy(alpha = .8f))))) else Modifier)
                 .background(if (backdrop != null) Color.Transparent else pageBackground)) {
                 TopAppBar(
-                    title = when (displayedPage) { 0 -> tr("星愿"); 1 -> tr("账户"); 2 -> tr("设置"); 4 -> tr("主题设置"); 5 -> tr("导入与导出"); 6 -> tr("目标排序"); 7 -> tr("账户排序"); else -> tr("关于") },
+                    title = when (displayedPage) { 0 -> tr("app.name"); 1 -> tr("account.title"); 2 -> tr("settings.title"); 4 -> tr("theme.title"); 5 -> tr("settings.import_export"); 6 -> tr("sort.goals_title"); 7 -> tr("sort.accounts_title"); else -> tr("about.title") },
                     subtitle = "",
                     color = barColor,
                     scrollBehavior = contentScrollBehavior,
@@ -678,7 +678,7 @@ private fun SavingsApp(
                                     }.clipToBounds()) {
                                         val side = if (wideLayout) 32.dp else TopAppBarDefaults.TitlePadding
                                         val caption = if (displayedPage == 2 && quoteShown) {
-                                            if (quoteLoading) tr("一言加载中…") else hitokoto ?: tr("一言加载中…")
+                                            if (quoteLoading) tr("settings.quote_loading") else hitokoto ?: tr("settings.quote_loading")
                                         } else null
                                         if (caption != null) Text(caption,
                                             modifier = Modifier.fillMaxWidth()
@@ -716,24 +716,24 @@ private fun SavingsApp(
                         }
                         OverlayIconDropdownMenu(entries = listOf(
                             DropdownEntry(listOf(
-                                DropdownItem(tr("按名称排序"), selected = sortCriterion == 0, onClick = { sortCriterion = 0; applySort(0, descending) }),
-                                DropdownItem(tr("按时间排序"), selected = sortCriterion == 1, onClick = { sortCriterion = 1; applySort(1, descending) }),
-                                DropdownItem(if (sortingGoals) tr("价格排序") else tr("余额排序"), selected = sortCriterion == 2,
+                                DropdownItem(tr("sort.name"), selected = sortCriterion == 0, onClick = { sortCriterion = 0; applySort(0, descending) }),
+                                DropdownItem(tr("sort.time"), selected = sortCriterion == 1, onClick = { sortCriterion = 1; applySort(1, descending) }),
+                                DropdownItem(if (sortingGoals) tr("sort.price") else tr("sort.balance"), selected = sortCriterion == 2,
                                     onClick = { sortCriterion = 2; applySort(2, descending) }),
                             )),
-                            DropdownEntry(listOf(DropdownItem(tr("倒序"), selected = descending, onClick = {
+                            DropdownEntry(listOf(DropdownItem(tr("sort.descending"), selected = descending, onClick = {
                                 if (sortCriterion >= 0) applySort(sortCriterion, !descending)
                                 else if (sortingGoals) mutate { store.reorderGoals(goals.map { it.id }.reversed()) }
                                 else mutate { store.reorderAccounts(accounts.map { it.id }.reversed()) }
                                 descending = !descending
                             }))),
-                        ), collapseOnSelection = false) { Icon(MiuixIcons.More, contentDescription = tr("排序菜单"), modifier = Modifier.size(24.dp)) }
+                        ), collapseOnSelection = false) { Icon(MiuixIcons.More, contentDescription = tr("sort.menu"), modifier = Modifier.size(24.dp)) }
                     }
                 },
                 navigationIcon = {
                     if (displayedPage >= 3) IconButton(onClick = { backStack.removeLastOrNull() }) {
-                        Icon(MiuixIcons.Back, contentDescription = if (displayedPage == 6) tr("返回目标列表")
-                            else if (displayedPage == 7) tr("返回账户列表") else tr("返回设置"))
+                        Icon(MiuixIcons.Back, contentDescription = if (displayedPage == 6) tr("common.back_to_goals")
+                            else if (displayedPage == 7) tr("common.back_to_accounts") else tr("common.back_to_settings"))
                     }
                 })
             }
@@ -762,14 +762,14 @@ private fun SavingsApp(
                     Overview(goals, accounts, appearance, accent)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically) {
-                        SmallTitle(tr("目标列表"), insideMargin = PaddingValues(start = 12.dp, top = 4.dp, bottom = 4.dp))
+                        SmallTitle(tr("home.goal_list"), insideMargin = PaddingValues(start = 12.dp, top = 4.dp, bottom = 4.dp))
                         OverlayIconDropdownMenu(entry = DropdownEntry(listOf(
-                            DropdownItem(tr("新建目标"), onClick = { editingGoalId = null; goalEditor = true }),
-                            DropdownItem(tr("排序"), onClick = { navigate(6) }),
-                        ))) { Icon(MiuixIcons.More, contentDescription = tr("目标菜单"), modifier = Modifier.size(24.dp)) }
+                            DropdownItem(tr("goal.new_goal"), onClick = { editingGoalId = null; goalEditor = true }),
+                            DropdownItem(tr("sort.title"), onClick = { navigate(6) }),
+                        ))) { Icon(MiuixIcons.More, contentDescription = tr("goal.menu"), modifier = Modifier.size(24.dp)) }
                     }
                     if (goals.isEmpty()) {
-                        EmptyCard("star", tr("第一个心愿，从这里开始"), tr("旅行、应急金、心仪的礼物……\n给目标起个名字，让积累看得见。"), tr("创建我的目标")) {
+                        EmptyCard("star", tr("home.first_wish_here"), tr("goal.create_intro"), tr("goal.create_my_goal")) {
                             editingGoalId = null; goalEditor = true
                         }
                     }
@@ -796,57 +796,57 @@ private fun SavingsApp(
                     if (candidate != null) {
                         val account = accounts.firstOrNull { it.id == candidate.accountId }
                         Panel {
-                            Badge(tr("等待你确认"), accent)
-                            Text(account?.name ?: tr("账户已删除"), style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold)
+                            Badge(tr("accessibility.waiting_confirm"), accent)
+                            Text(account?.name ?: tr("account.error_already_deleted"), style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold)
                             Text("¥ ${Money.format(candidate.balance)}", style = MiuixTheme.textStyles.title2, fontWeight = FontWeight.Bold)
-                            Note(tr("识别于 %s。请核对小星页面，确认后才会更新进度。", timeLabel(candidate.capturedAt)))
+                            Note(tr("accessibility.recognized_at", timeLabel(candidate.capturedAt)))
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Button(onClick = { mutate { store.clearCandidate() } }, modifier = Modifier.weight(1f)) { Text(tr("忽略")) }
+                                Button(onClick = { mutate { store.clearCandidate() } }, modifier = Modifier.weight(1f)) { Text(tr("common.ignore")) }
                                 Button(onClick = { mutate { store.acceptCandidate() } }, enabled = account != null,
-                                    modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColorsPrimary()) { Text(tr("确认同步")) }
+                                    modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColorsPrimary()) { Text(tr("accessibility.confirm_sync")) }
                             }
                         }
                     }
                     if (request != null && request.expiresAt > System.currentTimeMillis()) {
                         Panel {
-                            Text(tr("等待读取账户详情"), style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold)
-                            Note(tr("两分钟内打开小星记账中的对应账户详情，检测到详情页后自动读取顶部人民币余额，再返回确认。"))
-                            Button(onClick = { mutate { store.cancelCapture() } }) { Text(tr("取消本次读取")) }
+                            Text(tr("accessibility.waiting_page"), style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold)
+                            Note(tr("accessibility.read_steps_detail"))
+                            Button(onClick = { mutate { store.cancelCapture() } }) { Text(tr("accessibility.cancel_read")) }
                         }
                     }
                     Panel {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             IconTile("link", accent)
                             Column(Modifier.weight(1f)) {
-                                Text(tr("小星记账"), style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold)
-                                Text(if (enabled) tr("页面读取已开启 · 按需读取") else tr("开启页面读取，同步账户余额"), style = MiuixTheme.textStyles.footnote1,
+                                Text(tr("app.xiaoxing"), style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold)
+                                Text(if (enabled) tr("accessibility.read_enabled") else tr("accessibility.enable_read_summary"), style = MiuixTheme.textStyles.footnote1,
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                             }
-                            Badge(if (enabled) tr("已授权") else tr("未授权"), accent)
+                            Badge(if (enabled) tr("accessibility.granted") else tr("accessibility.not_granted"), accent)
                         }
-                        Note(tr("小星暂未提供公开的余额查询接口。此功能只识别你主动打开的账户详情，需要手动确认，不会在后台实时同步。"))
+                        Note(tr("accessibility.no_public_api_note"))
                         Button(onClick = {
                             if (enabled) {
                                 openReaderSettings()
-                                notify(tr("请在系统设置中关闭星愿的无障碍服务"))
+                                notify(tr("accessibility.disable_in_settings"))
                             } else {
                                 disclosure = true
                             }
                         }, modifier = Modifier.fillMaxWidth(),
                             colors = if (enabled) ButtonDefaults.buttonColorsPrimary()
                             else ButtonDefaults.buttonColors()) {
-                            Text(if (enabled) tr("关闭星愿无障碍服务") else tr("设置读取权限"))
+                            Text(if (enabled) tr("accessibility.disable_service") else tr("accessibility.set_up_permission"))
                         }
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically) {
-                        SmallTitle(tr("我的账户"), insideMargin = PaddingValues(start = 12.dp, top = 4.dp, bottom = 4.dp))
+                        SmallTitle(tr("account.my_accounts"), insideMargin = PaddingValues(start = 12.dp, top = 4.dp, bottom = 4.dp))
                         OverlayIconDropdownMenu(entry = DropdownEntry(listOf(
-                            DropdownItem(tr("添加账户"), onClick = { editingAccountId = null; accountEditor = true }),
-                            DropdownItem(tr("排序"), onClick = { navigate(7) }),
-                        ))) { Icon(MiuixIcons.More, contentDescription = tr("账户菜单"), modifier = Modifier.size(24.dp)) }
+                            DropdownItem(tr("account.add"), onClick = { editingAccountId = null; accountEditor = true }),
+                            DropdownItem(tr("sort.title"), onClick = { navigate(7) }),
+                        ))) { Icon(MiuixIcons.More, contentDescription = tr("account.menu"), modifier = Modifier.size(24.dp)) }
                     }
-                    if (accounts.isEmpty()) EmptyCard("bank", tr("先连接一份积累"), tr("添加与小星记账完全相同的账户名称，\n就能为攒钱目标提供余额。"), tr("添加第一个账户")) {
+                    if (accounts.isEmpty()) EmptyCard("bank", tr("goal.connect_first"), tr("account.empty_intro"), tr("account.add_first_account")) {
                         editingAccountId = null; accountEditor = true
                     }
                     val accountCard: @Composable (BankAccount) -> Unit = { account ->
@@ -860,14 +860,14 @@ private fun SavingsApp(
                                 }
                             }
                             Text("¥ ${Money.format(account.balance)}", style = MiuixTheme.textStyles.title2, fontWeight = FontWeight.Bold)
-                            Text(tr("更新于 %s", timeLabel(account.updatedAt)), style = MiuixTheme.textStyles.footnote1,
+                            Text(tr("account.updated_at", timeLabel(account.updatedAt)), style = MiuixTheme.textStyles.footnote1,
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(onClick = { capture(account) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColorsPrimary()) {
-                                    Text(tr("读取小星余额"))
+                                    Text(tr("accessibility.read_balance"))
                                 }
-                                Button(onClick = { editingAccountId = account.id; accountEditor = true }) { Text(tr("编辑")) }
-                                Button(onClick = { deletingAccount = account; deletingAccountVisible = true }) { Text(tr("删除")) }
+                                Button(onClick = { editingAccountId = account.id; accountEditor = true }) { Text(tr("common.edit")) }
+                                Button(onClick = { deletingAccount = account; deletingAccountVisible = true }) { Text(tr("common.delete")) }
                             }
                         }
                     }
@@ -915,15 +915,15 @@ private fun SavingsApp(
                     } }
                 }
                 2 -> {
-                    SmallTitle(text = tr("语言"), textColor = accent,
+                    SmallTitle(text = tr("settings.language"), textColor = accent,
                         insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
                     Card(Modifier.fillMaxWidth()) {
-                        OverlayDropdownPreference(title = tr("语言"),
+                        OverlayDropdownPreference(title = tr("settings.language"),
                             summary = if (Languages.choice == AppLanguage.FollowSystem)
-                                tr("跟随系统语言（%s）", Languages.current.nativeName)
-                            else tr("选择应用的显示语言"),
+                                tr("settings.follow_system_language", Languages.current.nativeName)
+                            else tr("settings.choose_language"),
                             items = AppLanguage.entries.map {
-                                if (it == AppLanguage.FollowSystem) tr("跟随系统") else it.nativeName
+                                if (it == AppLanguage.FollowSystem) tr("settings.follow_system") else it.nativeName
                             },
                             selectedIndex = Languages.choice.ordinal,
                             onSelectedIndexChange = { value -> mutate {
@@ -931,12 +931,12 @@ private fun SavingsApp(
                                 Languages.set(AppLanguage.entries[value])
                             } })
                     }
-                    SmallTitle(text = tr("外观"), textColor = accent,
+                    SmallTitle(text = tr("settings.appearance"), textColor = accent,
                         insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
                     Card(Modifier.fillMaxWidth()) {
-                        ArrowPreference(title = tr("主题设置"), summary = tr("主题、强调色、首页样式与模糊效果"), onClick = { navigate(4) })
+                        ArrowPreference(title = tr("theme.title"), summary = tr("settings.theme_summary"), onClick = { navigate(4) })
                         if (Languages.current.isChinese) {
-                            SwitchPreference(title = "启用一言", summary = "中文玩家特调",
+                            SwitchPreference(title = tr("settings.quote_enable"), summary = tr("settings.quote_summary"),
                                 checked = quoteEnabled,
                                 onCheckedChange = { value -> mutate {
                                     store.saveQuoteEnabled(value)
@@ -944,33 +944,33 @@ private fun SavingsApp(
                                 } })
                         }
                     }
-                    SmallTitle(text = tr("备份"), textColor = accent,
+                    SmallTitle(text = tr("settings.backup"), textColor = accent,
                         insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
                     Card(Modifier.fillMaxWidth()) {
-                        ArrowPreference(title = tr("导入与导出"), summary = tr("通过 JSON 文件备份或恢复数据"), onClick = { navigate(5) })
+                        ArrowPreference(title = tr("settings.import_export"), summary = tr("settings.import_export_summary"), onClick = { navigate(5) })
                     }
-                    SmallTitle(text = tr("应用"), textColor = accent,
+                    SmallTitle(text = tr("settings.app"), textColor = accent,
                         insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
                     Card(Modifier.fillMaxWidth()) {
-                        ArrowPreference(title = tr("关于"), summary = tr("星愿攒钱 · 使用说明与隐私"), onClick = { navigate(3) })
+                        ArrowPreference(title = tr("about.title"), summary = tr("about.help_and_privacy"), onClick = { navigate(3) })
                     }
                 }
                 4 -> {
-                    SmallTitle(text = tr("主题"), textColor = accent,
+                    SmallTitle(text = tr("settings.theme"), textColor = accent,
                         insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
                     Card(Modifier.fillMaxWidth()) {
-                        OverlayDropdownPreference(title = tr("主题模式"), summary = tr("选择应用的明暗模式"),
-                            items = listOf(tr("跟随系统"), tr("浅色"), tr("深色")), selectedIndex = appearance.themeMode,
+                        OverlayDropdownPreference(title = tr("theme.mode"), summary = tr("theme.choose_mode"),
+                            items = listOf(tr("settings.follow_system"), tr("theme.light"), tr("theme.dark")), selectedIndex = appearance.themeMode,
                             onSelectedIndexChange = { value -> mutate { store.saveAppearance(store.appearance().copy(themeMode = value)) } })
-                        SwitchPreference(title = tr("深色模式纯黑背景"), summary = tr("仅在深色模式下使用纯黑页面背景"),
+                        SwitchPreference(title = tr("theme.pure_black"), summary = tr("theme.pure_black_summary"),
                             checked = appearance.pureBlackBackground,
                             onCheckedChange = { value -> mutate { store.saveAppearance(store.appearance().copy(pureBlackBackground = value)) } })
-                        SwitchPreference(title = tr("模糊"), summary = if (android.os.Build.VERSION.SDK_INT >= 33) tr("启用顶栏和底栏的模糊效果") else tr("需要 Android 13 或更高版本"),
+                        SwitchPreference(title = tr("theme.blur"), summary = if (android.os.Build.VERSION.SDK_INT >= 33) tr("settings.blur_summary") else tr("theme.needs_android13"),
                             enabled = android.os.Build.VERSION.SDK_INT >= 33,
                             checked = appearance.blurEnabled,
                             onCheckedChange = { value -> mutate { store.saveAppearance(store.appearance().copy(blurEnabled = value)) } })
-                        OverlayDropdownPreference(title = tr("强调色"), summary = tr("选择应用强调色"),
-                            items = listOf(tr("默认"), tr("莫奈取色"), tr("蓝色"), tr("绿色"), tr("橙色"), tr("紫色")),
+                        OverlayDropdownPreference(title = tr("theme.accent"), summary = tr("theme.choose_accent"),
+                            items = listOf(tr("theme.palette_default"), tr("theme.monet"), tr("theme.color_blue"), tr("theme.color_green"), tr("theme.color_orange"), tr("theme.color_purple")),
                             selectedIndex = appearance.accentIndex,
                             onSelectedIndexChange = { value -> mutate { store.saveAppearance(store.appearance().copy(accentIndex = value)) } })
                         AnimatedVisibility(
@@ -979,95 +979,95 @@ private fun SavingsApp(
                             exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
                         ) {
                             Column {
-                                OverlayDropdownPreference(title = tr("调色板风格"), summary = tr("用于推导 MIUIX 调色板的色调算法"),
+                                OverlayDropdownPreference(title = tr("theme.palette_style"), summary = tr("theme.monet_summary"),
                                     enabled = appearance.accentIndex >= 2 || (appearance.accentIndex == 1 && monetSeed != null),
                                     items = ThemePaletteStyle.entries.map { it.name }, selectedIndex = appearance.paletteStyle,
                                     onSelectedIndexChange = { value -> mutate { store.saveAppearance(store.appearance().copy(paletteStyle = value)) } })
-                                OverlayDropdownPreference(title = tr("色彩规范"), summary = tr("Material 3 色彩规范版本"),
+                                OverlayDropdownPreference(title = tr("theme.color_spec"), summary = tr("theme.material3_palette"),
                                     enabled = appearance.accentIndex >= 2 || (appearance.accentIndex == 1 && monetSeed != null),
                                     items = listOf("2021", "2025"), selectedIndex = appearance.colorSpec,
                                     onSelectedIndexChange = { value -> mutate { store.saveAppearance(store.appearance().copy(colorSpec = value)) } })
                             }
                         }
-                        SwitchPreference(title = tr("使用悬浮底栏"), summary = tr("底部导航以悬浮样式显示，横屏时同样生效"),
+                        SwitchPreference(title = tr("settings.floating_bar_enabled"), summary = tr("settings.floating_bar_summary"),
                             checked = appearance.floatingNavBar,
                             onCheckedChange = { value -> mutate { store.saveAppearance(store.appearance().copy(floatingNavBar = value)) } })
                         AnimatedVisibility(visible = appearance.floatingNavBar) {
                             Column {
-                                OverlayDropdownPreference(title = tr("悬浮底栏样式"),
+                                OverlayDropdownPreference(title = tr("settings.floating_bar_style"),
                                     items = listOf("miuix", "iOS-like"), selectedIndex = appearance.floatingNavBarStyle,
                                     onSelectedIndexChange = { value -> mutate { store.saveAppearance(store.appearance().copy(floatingNavBarStyle = value)) } })
                             }
                         }
                     }
-                    SmallTitle(text = tr("首页"), textColor = accent,
+                    SmallTitle(text = tr("nav.home"), textColor = accent,
                         insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
                     Card(Modifier.fillMaxWidth()) {
-                        OverlayDropdownPreference(title = tr("首页横幅"), items = listOf(tr("浅色"), tr("深色")),
+                        OverlayDropdownPreference(title = tr("home.banner"), items = listOf(tr("theme.light"), tr("theme.dark")),
                             selectedIndex = appearance.bannerStyle,
                             onSelectedIndexChange = { value -> mutate { store.saveAppearance(store.appearance().copy(bannerStyle = value)) } })
-                        if (goals.isNotEmpty()) OverlayDropdownPreference(title = tr("横幅目标"),
-                            items = listOf(tr("自动选择")) + goals.map { it.title },
+                        if (goals.isNotEmpty()) OverlayDropdownPreference(title = tr("home.banner_goal"),
+                            items = listOf(tr("theme.auto")) + goals.map { it.title },
                             selectedIndex = goals.indexOfFirst { it.id == appearance.featuredGoalId }.let { if (it < 0) 0 else it + 1 },
                             onSelectedIndexChange = { value -> mutate { store.saveAppearance(store.appearance().copy(featuredGoalId = if (value == 0) "" else goals[value - 1].id)) } })
-                        SwitchPreference(title = tr("紧凑目标列表"), summary = tr("减少目标卡片的留白"),
+                        SwitchPreference(title = tr("settings.compact_cards"), summary = tr("settings.compact_cards_summary"),
                             checked = appearance.compactList,
                             onCheckedChange = { value -> mutate { store.saveAppearance(store.appearance().copy(compactList = value)) } })
-                        SwitchPreference(title = tr("预测性返回手势"), summary = tr("使用系统的预测性返回动画"),
+                        SwitchPreference(title = tr("settings.predictive_back"), summary = tr("settings.predictive_back_summary"),
                             checked = appearance.predictiveBackEnabled,
                             onCheckedChange = { value -> mutate { store.saveAppearance(store.appearance().copy(predictiveBackEnabled = value)) } })
                     }
                 }
                 5 -> {
                     Card(Modifier.fillMaxWidth()) {
-                        ArrowPreference(title = tr("导出备份"), summary = tr("将账户、目标、全部设置和一言保存为 JSON 文件"),
+                        ArrowPreference(title = tr("backup.export"), summary = tr("backup.export_summary"),
                             enabled = !backupBusy, onClick = {
                                 exportLauncher.launch("starswish-backup-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(Date())}.json")
                             })
-                        ArrowPreference(title = tr("导入备份"), summary = tr("选择 JSON 备份，确认后替换现有数据"),
+                        ArrowPreference(title = tr("backup.import"), summary = tr("settings.import_export_summary_short"),
                             enabled = !backupBusy, onClick = { importLauncher.launch(arrayOf("application/json", "text/*", "application/octet-stream")) })
                     }
-                    if (backupBusy) Note(tr("正在处理备份，请稍候…"))
+                    if (backupBusy) Note(tr("backup.processing"))
                     Panel {
-                        Text(tr("注意"), fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        Note(tr("备份文件为明文 JSON，包含账户名称与余额，请妥善保存。导入会替换现有账户、目标和全部设置，建议先导出当前数据。"))
-                        Note(tr("备份不包含读取中的临时请求及待确认余额。无障碍服务权限由系统管理，换设备后需要重新开启。"))
+                        Text(tr("common.notice"), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Note(tr("backup.plain_json_note"))
+                        Note(tr("backup.excludes_note"))
                     }
                 }
                 3 -> {
                     Panel {
                         IconTile("star", accent)
-                        Text(tr("星愿攒钱"), fontWeight = FontWeight.Bold, fontSize = 24.sp)
-                        Text("$versionName  /  ${tr("Kelsuita倾情出品")}", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                        Text(tr("app.name_full"), fontWeight = FontWeight.Bold, fontSize = 24.sp)
+                        Text("$versionName  /  ${tr("about.made_by_kelsuita")}", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                     }
                     Card(Modifier.fillMaxWidth()) {
-                        ArrowPreference(title = tr("Github链接"), summary = tr("查看项目，更新应用，看看Kelsuita在偷懒吗。"), onClick = {
+                        ArrowPreference(title = tr("about.github_link"), summary = tr("about.project_note"), onClick = {
                             context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/kelsuita/starswish")))
                         })
-                        ArrowPreference(title = tr("捐助我"), summary = tr("请Kelsuita吃包辣条"), onClick = {
+                        ArrowPreference(title = tr("about.donate"), summary = tr("about.donate_summary"), onClick = {
                             context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://afdian.com/a/kelsuita")))
                         })
                     }
                     Panel {
-                        Text(tr("使用步骤"), fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        HelpStep("01", tr("添加账户"), tr("名称须与小星记账的账户名称完全一致；不需要银行卡号、密码。"))
-                        HelpStep("02", tr("创建心愿"), tr("自定义名称、金额、截止日期，选择关联账户及进度计算方式。"))
-                        HelpStep("03", tr("读取并确认"), tr("点击读取，进入小星的账户详情页，再回到这里核对并确认余额。若页面不可识别，可手动更新。"))
+                        Text(tr("accessibility.steps"), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        HelpStep("01", tr("account.add"), tr("account.name_must_match"))
+                        HelpStep("02", tr("goal.create_wish"), tr("goal.form_intro"))
+                        HelpStep("03", tr("accessibility.read_and_confirm"), tr("accessibility.read_help"))
                     }
                     Panel {
-                        Text(tr("数据留在你的手机"), fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        Note(tr("无需登录。启用一言后，应用会在没有缓存时向一言接口请求一句话；账户、目标与已确认余额只保存在应用私有存储，不会发送给一言接口。不收集页面截图，不保存完整页面文字。卸载应用会删除数据。"))
-                        Note(tr("页面读取仅在你发起后两分钟内生效，并限定为小星记账。不会自动点击、修改账单、访问银行应用或执行转账。"))
-                        Button(onClick = { disclosure = true }, modifier = Modifier.fillMaxWidth()) { Text(tr("管理读取权限")) }
+                        Text(tr("about.data_stays_local"), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Note(tr("about.privacy_note"))
+                        Note(tr("accessibility.read_privacy_note"))
+                        Button(onClick = { disclosure = true }, modifier = Modifier.fillMaxWidth()) { Text(tr("accessibility.manage_permission")) }
                     }
                     Panel {
-                        Text(tr("进度如何计算"), fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        Note(tr("「当前余额」：关联账户的余额合计。\n「从现在开始攒」：余额合计减去创建目标时的起始余额。若余额减少，进度也会减少；最低显示为 0%。"))
-                        Note(tr("修改目标名称、金额、日期不会重置起点。修改关联账户或切换计算方式时，会重新记录起点。"))
+                        Text(tr("goal.how_progress_works"), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Note(tr("goal.calc_help_balance"))
+                        Note(tr("goal.edit_help"))
                     }
                     Button(onClick = {
                         context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://cxincx.com/support/scheme.html")))
-                    }, modifier = Modifier.fillMaxWidth()) { Text(tr("查看小星记账官方接口文档")) }
+                    }, modifier = Modifier.fillMaxWidth()) { Text(tr("about.xiaoxing_docs")) }
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -1104,11 +1104,11 @@ private fun SavingsApp(
         pendingBackup?.let { backup ->
             AppDialog(
                 show = importVisible,
-                title = tr("导入备份？"),
+                title = tr("backup.import_title"),
                 onDismiss = { if (!backupBusy) importVisible = false },
                 onDismissFinished = { pendingBackupJson = null; finished() },
             ) {
-                Note(tr("备份包含 %s 个账户、%s 个目标，以及全部设置和一言。确认后将替换当前数据，无法撤销；建议先导出当前数据。", backup.accounts.size, backup.goals.size))
+                Note(tr("backup.confirm_summary", backup.accounts.size, backup.goals.size))
                 Button(onClick = {
                     scope.launch {
                         backupBusy = true
@@ -1119,14 +1119,14 @@ private fun SavingsApp(
                             Languages.set(AppLanguage.entries[backup.language])
                             importVisible = false
                             refresh()
-                            notify(tr("备份已导入"))
+                            notify(tr("backup.imported"))
                         } catch (error: Exception) {
                             if (error is CancellationException) throw error
-                            notify(tr("导入失败：%s", error.message ?: tr("保存失败")))
+                            notify(tr("backup.import_failed", error.message ?: tr("common.save_failed")))
                         } finally { backupBusy = false }
                     }
-                }, enabled = !backupBusy, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColorsPrimary()) { Text(tr("确认替换并导入")) }
-                Button(onClick = { importVisible = false }, enabled = !backupBusy, modifier = Modifier.fillMaxWidth()) { Text(tr("取消")) }
+                }, enabled = !backupBusy, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColorsPrimary()) { Text(tr("backup.confirm_import")) }
+                Button(onClick = { importVisible = false }, enabled = !backupBusy, modifier = Modifier.fillMaxWidth()) { Text(tr("common.cancel")) }
             }
         }
     }
@@ -1153,32 +1153,32 @@ private fun SavingsApp(
     DialogHost(disclosure) { finished ->
         AppDialog(
             show = disclosure,
-            title = tr("读取小星记账余额"),
+            title = tr("accessibility.read_ledger_balance"),
             onDismiss = { disclosure = false },
             onDismissFinished = finished,
         ) {
-            Note(tr("在系统设置启用「星愿攒钱 · 读取小星账户」后，应用会获得读取小星记账可见文字的能力。"))
-            Note(tr("仅当你点击「读取小星余额」后，两分钟内识别指定账户详情中的名称及人民币余额。识别结果须返回本应用确认，才会更新目标。"))
-            Note(tr("不会读取其他应用、收集截图或上传数据，不会执行点击、记账或转账。页面结构变化时可能无法识别，请使用手动更新。你可随时在系统设置关闭此权限。"))
+            Note(tr("accessibility.enable_in_settings_note"))
+            Note(tr("accessibility.permission_summary"))
+            Note(tr("accessibility.privacy_detail"))
             Button(onClick = { disclosure = false; openReaderSettings() }, modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColorsPrimary()) { Text(tr("了解并前往系统设置")) }
-            Button(onClick = { disclosure = false }, modifier = Modifier.fillMaxWidth()) { Text(tr("暂不开启")) }
+                colors = ButtonDefaults.buttonColorsPrimary()) { Text(tr("accessibility.learn_and_open_settings")) }
+            Button(onClick = { disclosure = false }, modifier = Modifier.fillMaxWidth()) { Text(tr("common.not_now")) }
         }
     }
     DialogHost(deletingGoalVisible) { finished ->
         deletingGoal?.let { goal ->
             AppDialog(
                 show = deletingGoalVisible,
-                title = tr("删除这个心愿？"),
+                title = tr("goal.delete_title"),
                 onDismiss = { deletingGoalVisible = false },
                 onDismissFinished = { deletingGoal = null; finished() },
             ) {
-                Note(tr("将删除「%s」，关联账户会保留。此操作无法撤销。", goal.title))
+                Note(tr("goal.delete_message", goal.title))
                 Button(onClick = { if (mutate { store.deleteGoal(goal.id) }) deletingGoalVisible = false },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.error,
-                        contentColor = MiuixTheme.colorScheme.onError)) { Text(tr("删除")) }
-                Button(onClick = { deletingGoalVisible = false }, modifier = Modifier.fillMaxWidth()) { Text(tr("取消")) }
+                        contentColor = MiuixTheme.colorScheme.onError)) { Text(tr("common.delete")) }
+                Button(onClick = { deletingGoalVisible = false }, modifier = Modifier.fillMaxWidth()) { Text(tr("common.cancel")) }
             }
         }
     }
@@ -1186,16 +1186,16 @@ private fun SavingsApp(
         deletingAccount?.let { account ->
             AppDialog(
                 show = deletingAccountVisible,
-                title = tr("删除这个账户？"),
+                title = tr("account.delete_title"),
                 onDismiss = { deletingAccountVisible = false },
                 onDismissFinished = { deletingAccount = null; finished() },
             ) {
-                Note(tr("将删除「%s」。如有目标关联此账户，请先编辑目标解除关联。", account.name))
+                Note(tr("account.delete_linked_message", account.name))
                 Button(onClick = { if (mutate { store.deleteAccount(account.id) }) deletingAccountVisible = false },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.error,
-                        contentColor = MiuixTheme.colorScheme.onError)) { Text(tr("删除")) }
-                Button(onClick = { deletingAccountVisible = false }, modifier = Modifier.fillMaxWidth()) { Text(tr("取消")) }
+                        contentColor = MiuixTheme.colorScheme.onError)) { Text(tr("common.delete")) }
+                Button(onClick = { deletingAccountVisible = false }, modifier = Modifier.fillMaxWidth()) { Text(tr("common.cancel")) }
             }
         }
     }
@@ -1212,32 +1212,32 @@ private fun SavingsApp(
     val base = if (status) MiuixTheme.colorScheme.primaryContainer else accent
     val fill = if (status) MiuixTheme.colorScheme.onPrimaryContainer else MiuixTheme.colorScheme.onPrimary
     Box(Modifier.fillMaxWidth().squircleSurface(color = base, cornerRadius = 20.dp)
-        .clearAndSetSemantics { contentDescription = tr("首页横幅 %s %s", featured?.title ?: tr("尚无目标"), if (completed) tr("苦尽甘来") else "${(progress * 100).toInt()}%") }) {
+        .clearAndSetSemantics { contentDescription = tr("home.banner_description", featured?.title ?: tr("home.no_goal"), if (completed) tr("home.completed") else "${(progress * 100).toInt()}%") }) {
         Box(Modifier.align(Alignment.TopEnd).padding(18.dp)) {
             if (completed) Text("🎉", fontSize = 44.sp)
             else Symbol("star", foreground.copy(alpha = .22f), Modifier.size(44.dp))
         }
         Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(tr("当前心愿"), style = MiuixTheme.textStyles.footnote1, color = subtle)
-            Text(featured?.title ?: tr("创建你的第一个目标"), style = MiuixTheme.textStyles.title2,
+            Text(tr("home.current_wish"), style = MiuixTheme.textStyles.footnote1, color = subtle)
+            Text(featured?.title ?: tr("home.empty_create_goal"), style = MiuixTheme.textStyles.title2,
                 fontWeight = FontWeight.Bold, color = foreground, maxLines = 2,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(if (featured == null) tr("先添加账户，再设定目标") else
+                Text(if (featured == null) tr("account.add_before_goal") else
                     "¥ ${Money.format(featured.saved(accounts))} / ¥ ${Money.format(featured.target)}",
                     style = MiuixTheme.textStyles.footnote1, color = subtle, modifier = Modifier.weight(1f))
-                Text(if (completed) tr("苦尽甘来") else "${(progress * 100).toInt()}%",
+                Text(if (completed) tr("home.completed") else "${(progress * 100).toInt()}%",
                     style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold, color = foreground)
             }
             LinearProgressIndicator(progress = progress, height = 8.dp,
                 colors = ProgressIndicatorDefaults.progressIndicatorColors(
                     foregroundColor = fill, backgroundColor = fill.copy(alpha = .20f)))
             if (featured != null) {
-                val remainingLabel = if (featured.remaining(accounts) == 0L) tr("目标已达成")
-                    else tr("还差 ¥ %s", Money.format(featured.remaining(accounts)))
+                val remainingLabel = if (featured.remaining(accounts) == 0L) tr("goal.achieved")
+                    else tr("goal.remaining_amount", Money.format(featured.remaining(accounts)))
                 Text(if (featured.deadline.isBlank()) remainingLabel
-                    else tr("%s · %s", remainingLabel, featured.deadline),
+                    else tr("format.title_dot_detail", remainingLabel, featured.deadline),
                     color = subtle, style = MiuixTheme.textStyles.footnote2, maxLines = 1)
             }
         }
@@ -1254,42 +1254,42 @@ private fun SavingsApp(
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(goal.title, style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold, maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                Text(if (goal.mode == GoalMode.BALANCE) tr("按当前余额计算") else tr("从创建时开始积累"),
+                Text(if (goal.mode == GoalMode.BALANCE) tr("goal.mode_balance") else tr("goal.count_from_creation"),
                     style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
             }
-            Badge(if (saved >= goal.target) tr("已达成") else tr("积累中"), color)
+            Badge(if (saved >= goal.target) tr("goal.completed") else tr("goal.in_progress"), color)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("¥ ${Money.format(saved)}", style = MiuixTheme.textStyles.title2, fontWeight = FontWeight.Bold)
-                Text(tr("目标 ¥ %s", Money.format(goal.target)), style = MiuixTheme.textStyles.footnote1,
+                Text(tr("goal.target_amount_line", Money.format(goal.target)), style = MiuixTheme.textStyles.footnote1,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
             }
             Text("${(goal.progress(accounts) * 100).toInt()}%", style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold, color = color)
         }
         LinearProgressIndicator(progress = progress, height = 8.dp,
-            modifier = Modifier.semantics { contentDescription = tr("%s完成进度", goal.title) },
+            modifier = Modifier.semantics { contentDescription = tr("home.progress_percent", goal.title) },
             colors = ProgressIndicatorDefaults.progressIndicatorColors(foregroundColor = color, backgroundColor = MiuixTheme.colorScheme.secondaryContainer))
-        if (!compact) Text(if (saved >= goal.target) tr("心愿达成，值得为自己庆祝！") else tr("还差 ¥ %s，继续慢慢靠近。", Money.format(goal.remaining(accounts))),
+        if (!compact) Text(if (saved >= goal.target) tr("home.goal_completed_celebration") else tr("home.remaining_amount_encourage", Money.format(goal.remaining(accounts))),
             style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         if (!compact && goal.deadline.isNotBlank()) {
             val days = runCatching { ChronoUnit.DAYS.between(LocalDate.now(), LocalDate.parse(goal.deadline)) }.getOrNull()
             val advice = when {
-                saved >= goal.target -> tr("已提前完成这份心愿")
+                saved >= goal.target -> tr("home.completed_early")
                 days == null -> ""
-                days < 0 -> tr("已超过计划日期，可编辑延长计划")
-                days == 0L -> tr("今天是计划完成日")
-                else -> tr("剩余 %s 天 · 每天约 ¥ %s", days, Money.format((goal.remaining(accounts) + days - 1) / days))
+                days < 0 -> tr("goal.overdue")
+                days == 0L -> tr("goal.due_today")
+                else -> tr("goal.remaining_days", days, Money.format((goal.remaining(accounts) + days - 1) / days))
             }
             Note("${goal.deadline}  /  $advice")
         }
         val linked = accounts.filter { it.id in goal.accountIds }
         if (!compact) Text(linked.joinToString(" · ") { it.name }, style = MiuixTheme.textStyles.footnote2, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-        if (!compact && goal.mode == GoalMode.GROWTH) Note(tr("起始余额 ¥ %s", Money.format(goal.baseline)))
+        if (!compact && goal.mode == GoalMode.GROWTH) Note(tr("goal.starting_balance", Money.format(goal.baseline)))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onSync, modifier = Modifier.weight(1f)) { Text(tr("更新余额")) }
-            Button(onClick = onEdit) { Text(tr("编辑")) }
-            Button(onClick = onDelete) { Text(tr("删除")) }
+            Button(onClick = onSync, modifier = Modifier.weight(1f)) { Text(tr("account.update_balance")) }
+            Button(onClick = onEdit) { Text(tr("common.edit")) }
+            Button(onClick = onDelete) { Text(tr("common.delete")) }
         }
     }
 }
@@ -1314,26 +1314,26 @@ private fun SavingsApp(
     var accountError by remember { mutableStateOf("") }
     AppDialog(
         show = show,
-        title = if (existing == null) tr("新建一个心愿") else tr("编辑心愿"),
+        title = if (existing == null) tr("goal.new_wish") else tr("goal.edit_wish"),
         onDismiss = onDismiss,
         onDismissFinished = onDismissFinished,
     ) {
         TextField(value = title, onValueChange = { title = it.take(40); titleError = "" },
-            label = tr("心愿名称，如：去看一次极光"), singleLine = true,
+            label = tr("goal.name_placeholder"), singleLine = true,
             colors = dialogFieldColors(titleError.isNotEmpty()))
         FieldError(titleError)
-        TextField(value = amount, onValueChange = { amount = it.take(18); amountError = "" }, label = tr("目标金额（元）"), singleLine = true,
+        TextField(value = amount, onValueChange = { amount = it.take(18); amountError = "" }, label = tr("goal.target_amount"), singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             colors = dialogFieldColors(amountError.isNotEmpty()))
         FieldError(amountError)
-        TextField(value = date, onValueChange = { date = it.take(10); dateError = "" }, label = tr("截止日期 YYYY-MM-DD（选填）"), singleLine = true,
+        TextField(value = date, onValueChange = { date = it.take(10); dateError = "" }, label = tr("goal.deadline_placeholder"), singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
             colors = dialogFieldColors(dateError.isNotEmpty()))
         FieldError(dateError)
-        Text(tr("关联账户"), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        Text(tr("goal.linked_accounts"), fontWeight = FontWeight.Bold, fontSize = 15.sp)
         if (accounts.isEmpty()) {
-            Note(tr("还没有账户，先添加一个账户再创建目标。"))
-            Button(onClick = onAddAccount, modifier = Modifier.fillMaxWidth()) { Text(tr("先去添加账户")) }
+            Note(tr("account.empty_before_goal"))
+            Button(onClick = onAddAccount, modifier = Modifier.fillMaxWidth()) { Text(tr("account.add_first")) }
         }
         accounts.forEach { account ->
             val checked = account.id in selected
@@ -1352,24 +1352,24 @@ private fun SavingsApp(
             }
         }
         FieldError(accountError)
-        Text(tr("进度计算方式"), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        Text(tr("goal.calculation_mode"), fontWeight = FontWeight.Bold, fontSize = 15.sp)
         Row(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ModeOption(tr("当前余额"), !growth, Modifier.weight(1f)) { growth = false }
-            ModeOption(tr("从现在开始攒"), growth, Modifier.weight(1f)) { growth = true }
+            ModeOption(tr("goal.current_balance"), !growth, Modifier.weight(1f)) { growth = false }
+            ModeOption(tr("goal.start_now"), growth, Modifier.weight(1f)) { growth = true }
         }
-        Note(if (growth) tr("以当前合计余额为起点，只计算之后新增的积累。") else tr("以所选账户的当前余额合计作为已攒金额。"))
-        Note(tr("目标进度条与图标跟随应用强调色，可在设置中统一调整。"))
+        Note(if (growth) tr("goal.mode_growth_summary") else tr("goal.mode_balance_summary"))
+        Note(tr("theme.goal_accent_note"))
         Button(onClick = {
             val target = Money.parse(amount)
             val parsedDate = if (date.isBlank()) null else runCatching { LocalDate.parse(date) }.getOrNull()
-            titleError = if (title.isBlank()) tr("给心愿起个名字吧") else ""
-            amountError = if (target == null || target <= 0) tr("请输入大于 0 的有效金额，最多两位小数") else ""
-            accountError = if (selected.isEmpty()) tr("请选择至少一个账户") else ""
+            titleError = if (title.isBlank()) tr("goal.name_empty_error") else ""
+            amountError = if (target == null || target <= 0) tr("goal.error_invalid_amount") else ""
+            accountError = if (selected.isEmpty()) tr("goal.error_account_required") else ""
             dateError = when {
                 date.isNotBlank() && (parsedDate == null || parsedDate.toString() != date) ->
-                    tr("日期格式应为 YYYY-MM-DD，例如 2027-12-31")
+                    tr("goal.error_date_format")
                 parsedDate != null && parsedDate < LocalDate.now() && date != existing?.deadline ->
-                    tr("请选择今天或之后的日期")
+                    tr("goal.error_past_date")
                 else -> ""
             }
             if (titleError.isEmpty() && amountError.isEmpty() && accountError.isEmpty() &&
@@ -1381,7 +1381,7 @@ private fun SavingsApp(
                     selected.toSet(), mode, if (growth) baseline else 0, date, existing?.colorIndex ?: 0))
             }
         }, enabled = accounts.isNotEmpty(), modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColorsPrimary()) {
-            Text(if (existing == null) tr("开启这个心愿") else tr("保存修改"))
+            Text(if (existing == null) tr("goal.start_wish") else tr("common.save_changes"))
         }
     }
 }
@@ -1410,30 +1410,30 @@ private fun SavingsApp(
     var balanceError by remember { mutableStateOf("") }
     AppDialog(
         show = show,
-        title = if (existing == null) tr("添加储蓄账户") else tr("编辑账户"),
+        title = if (existing == null) tr("account.add_savings") else tr("account.edit"),
         onDismiss = onDismiss,
         onDismissFinished = onDismissFinished,
     ) {
-        Note(tr("使用与小星记账完全一致的账户名称。初始余额请手动填写；之后可读取并确认更新。"))
-        TextField(value = name, onValueChange = { name = it.take(40); nameError = "" }, label = tr("账户名称，如：招商银行储蓄卡"), singleLine = true,
+        Note(tr("account.name_hint_detail"))
+        TextField(value = name, onValueChange = { name = it.take(40); nameError = "" }, label = tr("account.name_placeholder"), singleLine = true,
             colors = dialogFieldColors(nameError.isNotEmpty()))
         FieldError(nameError)
-        TextField(value = balance, onValueChange = { balance = it.take(18); balanceError = "" }, label = tr("当前人民币余额（元）"), singleLine = true,
+        TextField(value = balance, onValueChange = { balance = it.take(18); balanceError = "" }, label = tr("account.current_cny_balance"), singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             colors = dialogFieldColors(balanceError.isNotEmpty()))
         FieldError(balanceError)
-        Note(tr("仅支持人民币储蓄账户，不将信用卡额度当作存款。"))
+        Note(tr("account.cny_only_note"))
         Button(onClick = {
             val cents = Money.parse(balance)
-            nameError = if (name.isBlank()) tr("请输入账户名称") else ""
-            balanceError = if (cents == null) tr("请输入有效余额，最多两位小数") else ""
+            nameError = if (name.isBlank()) tr("account.error_name_required") else ""
+            balanceError = if (cents == null) tr("account.error_invalid_balance") else ""
             if (nameError.isEmpty() && balanceError.isEmpty() && cents != null) {
                 val balanceChanged = existing == null || cents != existing.balance
                 onSave(BankAccount(existing?.id ?: UUID.randomUUID().toString(), name.trim(), cents,
                     if (balanceChanged) System.currentTimeMillis() else existing.updatedAt,
-                    if (balanceChanged) "手动录入" else existing.source))
+                    if (balanceChanged) "account.source_manual" else existing.source))
             }
-        }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColorsPrimary()) { Text(tr("保存账户")) }
+        }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColorsPrimary()) { Text(tr("account.save")) }
     }
 }
 
@@ -1648,10 +1648,10 @@ private class SortDragState {
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
             Box(Modifier.size(48.dp).onGloballyPositioned { handleCoordinates = it }
                 .semantics {
-                    contentDescription = tr("拖动排序 %s", title)
+                    contentDescription = tr("sort.drag_handle", title)
                     customActions = listOf(
-                        CustomAccessibilityAction(tr("上移")) { reorder(-1) },
-                        CustomAccessibilityAction(tr("下移")) { reorder(1) },
+                        CustomAccessibilityAction(tr("common.move_up")) { reorder(-1) },
+                        CustomAccessibilityAction(tr("common.move_down")) { reorder(1) },
                     )
                 }
                 .pointerInput(id) {

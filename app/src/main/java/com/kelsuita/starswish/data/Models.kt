@@ -29,7 +29,7 @@ data class BankAccount(
     val name: String,
     val balance: Long,
     val updatedAt: Long,
-    val source: String = "手动录入",
+    val source: String = "account.source_manual",
     val createdAt: Long = 0L,
 )
 

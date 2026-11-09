@@ -1,6 +1,6 @@
 # Starwish
 
-**English** · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md)
+**English** · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md)
 
 > Write down what you want to buy, and watch it slowly come true.
 
@@ -30,7 +30,7 @@ background sync, no transaction history is read, and nothing is confirmed on you
 
 ## Download
 
-Current release: [Starwish Argenti 1.5.0 Hotfix](https://github.com/kelsuita/starswish/releases/tag/v1.5.0-hotfix)
+Current release: [Starwish Synesthesia Beacon 1.5.5](https://github.com/kelsuita/starswish/releases/tag/v1.5.5)
 
 - `app-universal-release.apk`: universal package, choose this if you are unsure about the ABI
 - `app-armeabi-v7a-release.apk`: 32-bit ARM devices
@@ -255,6 +255,18 @@ app/src/main/java/com/kelsuita/starswish/
 app/src/test/                          Unit tests for core logic
 tools/                                 Build and isolated emulator verification scripts
 ```
+
+### Language packs
+
+All in-app copy is addressed by stable identifiers such as `home.current_wish`; the text itself
+lives in `app/src/main/assets/i18n/` (`en`, `zh-CN`, `zh-TW`, `ja`). To add or update a translation, edit only
+those files — no Kotlin changes are needed, and the flat dotted keys can be uploaded to Crowdin
+directly. Missing keys fall back to English, then to the identifier itself. The app name and the
+accessibility service label/description are generated from the same packs into Android resources at
+build time, because Android reads them before the app starts. To add a language, drop a
+`<code>.json` copy of `en.json` into that folder and append one entry to `AppLanguage` in
+`Language.kt`; resource folders, follow-system matching and the language index range update
+automatically. The entry must be appended last because stored choices use the enum index.
 
 The same account can back several independent goals; this does not allocate funds or move money.
 The home banner only shows the progress of one chosen goal (the first by default). Renaming a goal

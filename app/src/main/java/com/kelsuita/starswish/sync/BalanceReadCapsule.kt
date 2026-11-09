@@ -39,7 +39,7 @@ internal class BalanceReadCapsule(private val service: AccessibilityService) {
             }
             elevation = dp(10).toFloat()
             isFocusable = true
-            contentDescription = tr("星愿，已读取，请返回星愿确认余额。点按打开账户确认页")
+            contentDescription = tr("accessibility.notification_body")
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
         content.addView(TextView(service).apply {
@@ -51,7 +51,7 @@ internal class BalanceReadCapsule(private val service: AccessibilityService) {
         content.addView(LinearLayout(service).apply {
             orientation = LinearLayout.VERTICAL
             addView(TextView(service).apply {
-                text = tr("已读取，请返回星愿")
+                text = tr("accessibility.read_done_return")
                 textSize = 15f
                 setTextColor(Color.WHITE)
                 setTypeface(typeface, Typeface.BOLD)
@@ -59,7 +59,7 @@ internal class BalanceReadCapsule(private val service: AccessibilityService) {
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             })
             addView(TextView(service).apply {
-                text = tr("点按核对并确认余额  ›")
+                text = tr("accessibility.tap_to_confirm")
                 textSize = 12f
                 setTextColor(Color.rgb(185, 189, 201))
                 setPadding(0, dp(3), 0, 0)
@@ -85,7 +85,7 @@ internal class BalanceReadCapsule(private val service: AccessibilityService) {
             // The overlay is positioned in screen coordinates; keep it clear of the status bar
             // and display cutout instead of drawing under system icons.
             y = statusBarInset() + dp(12)
-            setTitle(tr("星愿 · 余额读取完成"))
+            setTitle(tr("accessibility.notification_title"))
         }
         capsule = content
         if (runCatching { windows.addView(content, params) }.isFailure) {
