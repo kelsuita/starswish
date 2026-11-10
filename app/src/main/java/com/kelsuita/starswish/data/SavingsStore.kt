@@ -48,11 +48,13 @@ class SavingsStore(context: Context) {
         prefs.getBoolean("pure_black_background", false),
         prefs.getBoolean("floating_nav_bar", false),
         prefs.getInt("floating_nav_bar_style", 0).coerceIn(0, 1),
-        prefs.getBoolean("predictive_back_enabled", true)
+        prefs.getBoolean("predictive_back_enabled", true),
+        prefs.getInt("banner_decimals", 0).coerceIn(0, 5)
     )
     fun saveAppearance(value: Appearance) {
         require(value.themeMode in 0..2 && value.accentIndex in 0..5 && value.bannerStyle in 0..1 &&
-            value.paletteStyle in 0..8 && value.colorSpec in 0..1 && value.floatingNavBarStyle in 0..1)
+            value.paletteStyle in 0..8 && value.colorSpec in 0..1 && value.floatingNavBarStyle in 0..1 &&
+            value.bannerDecimals in 0..5)
         check(prefs.edit().putInt("theme_mode", value.themeMode)
             .putInt("accent_choice", value.accentIndex)
             .putInt("banner_style", value.bannerStyle)
@@ -64,7 +66,8 @@ class SavingsStore(context: Context) {
             .putBoolean("pure_black_background", value.pureBlackBackground)
             .putBoolean("floating_nav_bar", value.floatingNavBar)
             .putInt("floating_nav_bar_style", value.floatingNavBarStyle)
-            .putBoolean("predictive_back_enabled", value.predictiveBackEnabled).commit()) { tr("settings.appearance_save_failed") }
+            .putBoolean("predictive_back_enabled", value.predictiveBackEnabled)
+            .putInt("banner_decimals", value.bannerDecimals).commit()) { tr("settings.appearance_save_failed") }
     }
 
     @Synchronized fun exportBackup(): BackupData {
@@ -96,6 +99,7 @@ class SavingsStore(context: Context) {
             .putBoolean("floating_nav_bar", value.floatingNavBar)
             .putInt("floating_nav_bar_style", value.floatingNavBarStyle)
             .putBoolean("predictive_back_enabled", value.predictiveBackEnabled)
+            .putInt("banner_decimals", value.bannerDecimals)
             .putInt("language_v2", backup.language)
             .remove("capture").remove("candidate")
         if (backup.quoteEnabled == null) editor.remove("quote_enabled")

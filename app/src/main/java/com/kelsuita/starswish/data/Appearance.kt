@@ -19,4 +19,6 @@ data class Appearance(
     val floatingNavBarStyle: Int = 0,
     /** Use the platform predictive-back animation for the tab pager. */
     val predictiveBackEnabled: Boolean = true,
+    /** Decimal places shown on the home banner progress, 0 means a whole percent. */
+    val bannerDecimals: Int = 0,
 )

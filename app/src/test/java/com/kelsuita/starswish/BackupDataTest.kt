@@ -68,6 +68,7 @@ class BackupDataTest {
             original.copy(goals = listOf(original.goals.first().copy(target = 0))),
             original.copy(goals = listOf(original.goals.first().copy(deadline = "2027-13-30"))),
             original.copy(appearance = Appearance(accentIndex = 10)),
+            original.copy(appearance = Appearance(bannerDecimals = 6)),
             original.copy(appearance = Appearance(featuredGoalId = "missing")),
             original.copy(language = AppLanguage.entries.size),
         ).forEach { value -> assertThrows(IllegalArgumentException::class.java) { value.toJson() } }

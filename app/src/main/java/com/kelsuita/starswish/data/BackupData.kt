@@ -47,6 +47,7 @@ data class BackupData(
         require(appearance.themeMode in 0..2 && appearance.accentIndex in 0..5 &&
             appearance.bannerStyle in 0..1 && appearance.paletteStyle in 0..8 && appearance.colorSpec in 0..1 &&
             appearance.floatingNavBarStyle in 0..1 &&
+            appearance.bannerDecimals in 0..5 &&
             (appearance.featuredGoalId.isEmpty() || appearance.featuredGoalId.length <= 128) &&
             (appearance.featuredGoalId.isEmpty() || goals.any { it.id == appearance.featuredGoalId })) {
             tr("backup.error_appearance")

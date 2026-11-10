@@ -119,9 +119,9 @@ android {
     defaultConfig {
         applicationId = "com.kelsuita.starswish"
         minSdk = 26
-        targetSdk = 36
-        versionCode = 15
-        versionName = "Synesthesia Beacon 1.5.5"
+        targetSdk = 37
+        versionCode = 17
+        versionName = "Hanya 1.5.7"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     splits {

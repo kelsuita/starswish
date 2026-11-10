@@ -36,8 +36,11 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -66,7 +69,9 @@ import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.blur.textureBlur
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -75,6 +80,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -86,6 +92,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.serialization.Serializable
@@ -109,14 +116,17 @@ import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.menu.OverlayIconDropdownMenu
+import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.BankCards
+import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.Favorites
 import top.yukonga.miuix.kmp.icon.extended.Home
 import top.yukonga.miuix.kmp.icon.extended.Link
 import top.yukonga.miuix.kmp.icon.extended.More
+import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.squircle.squircleSurface
 import com.kelsuita.starswish.data.*
@@ -128,6 +138,7 @@ import java.time.temporal.ChronoUnit
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import kotlin.math.roundToInt
 import org.json.JSONObject
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -333,6 +344,10 @@ private fun SavingsApp(
     // The pending import is kept as JSON so the confirmation survives recreation.
     var pendingBackupJson by rememberSaveable(stateSaver = PendingBackupSaver) { mutableStateOf<String?>(null) }
     var importVisible by rememberSaveable { mutableStateOf(false) }
+    // The banner decimal count is edited in a sheet, so the draft only hits storage on confirm.
+    var bannerDecimalsSheet by remember { mutableStateOf(false) }
+    var bannerDecimalsDraft by remember { mutableIntStateOf(0) }
+    val hapticFeedback = LocalHapticFeedback.current
     val pendingBackup = remember(pendingBackupJson) {
         pendingBackupJson?.let { runCatching { BackupData.fromJson(it) }.getOrNull() }
     }
@@ -1006,6 +1021,12 @@ private fun SavingsApp(
                         OverlayDropdownPreference(title = tr("home.banner"), items = listOf(tr("theme.light"), tr("theme.dark")),
                             selectedIndex = appearance.bannerStyle,
                             onSelectedIndexChange = { value -> mutate { store.saveAppearance(store.appearance().copy(bannerStyle = value)) } })
+                        ArrowPreference(title = tr("settings.banner_decimals"),
+                            summary = tr("settings.banner_decimals_summary", appearance.bannerDecimals),
+                            onClick = {
+                                bannerDecimalsDraft = appearance.bannerDecimals
+                                bannerDecimalsSheet = true
+                            })
                         if (goals.isNotEmpty()) OverlayDropdownPreference(title = tr("home.banner_goal"),
                             items = listOf(tr("theme.auto")) + goals.map { it.title },
                             selectedIndex = goals.indexOfFirst { it.id == appearance.featuredGoalId }.let { if (it < 0) 0 else it + 1 },
@@ -1016,6 +1037,76 @@ private fun SavingsApp(
                         SwitchPreference(title = tr("settings.predictive_back"), summary = tr("settings.predictive_back_summary"),
                             checked = appearance.predictiveBackEnabled,
                             onCheckedChange = { value -> mutate { store.saveAppearance(store.appearance().copy(predictiveBackEnabled = value)) } })
+                    }
+                    OverlayBottomSheet(
+                        show = bannerDecimalsSheet,
+                        title = tr("settings.banner_decimals"),
+                        startAction = {
+                            IconButton(onClick = { bannerDecimalsSheet = false }) {
+                                Icon(MiuixIcons.Close, contentDescription = tr("common.cancel"),
+                                    tint = MiuixTheme.colorScheme.onBackground)
+                            }
+                        },
+                        endAction = {
+                            IconButton(onClick = {
+                                mutate { store.saveAppearance(store.appearance().copy(bannerDecimals = bannerDecimalsDraft)) }
+                                bannerDecimalsSheet = false
+                            }) {
+                                Icon(MiuixIcons.Ok, contentDescription = tr("common.confirm"),
+                                    tint = MiuixTheme.colorScheme.onBackground)
+                            }
+                        },
+                        onDismissRequest = { bannerDecimalsSheet = false },
+                        insideMargin = DpSize(24.dp, 48.dp),
+                    ) {
+                        // The sheet paints itself with colorScheme.background. The stock palette sets
+                        // surfaceContainer to that same color, which made this card vanish at the
+                        // default accent; fall back to a tinted container there.
+                        val cardColor = MiuixTheme.colorScheme.surfaceContainer
+                            .takeIf { it != MiuixTheme.colorScheme.background }
+                            ?: MiuixTheme.colorScheme.secondaryContainer
+                        Card(Modifier.fillMaxWidth(), colors = CardDefaults.defaultColors(color = cardColor)) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically) {
+                                    Text(tr("settings.banner_decimals_hint"), modifier = Modifier.weight(1f),
+                                        style = MiuixTheme.textStyles.footnote1,
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                                    Text(tr("settings.banner_decimals_value", bannerDecimalsDraft),
+                                        style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold)
+                                }
+                                Slider(
+                                    value = bannerDecimalsDraft.toFloat(),
+                                    onValueChange = { raw ->
+                                        val next = raw.roundToInt().coerceIn(0, 5)
+                                        if (next != bannerDecimalsDraft) {
+                                            hapticFeedback.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                            bannerDecimalsDraft = next
+                                        }
+                                    },
+                                    modifier = Modifier.pointerInput(Unit) {
+                                        val sliderSize = size
+                                        awaitEachGesture {
+                                            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                                            waitForUpOrCancellation(pass = PointerEventPass.Initial) ?: return@awaitEachGesture
+                                            val thumbRadius = sliderSize.height / 2f
+                                            val available = (sliderSize.width - 2f * thumbRadius).coerceAtLeast(1f)
+                                            val fraction = ((down.position.x - thumbRadius) / available).coerceIn(0f, 1f)
+                                            val next = (fraction * 5f).roundToInt().coerceIn(0, 5)
+                                            if (next != bannerDecimalsDraft) {
+                                                hapticFeedback.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                                bannerDecimalsDraft = next
+                                            }
+                                        }
+                                    },
+                                    valueRange = 0f..5f,
+                                    steps = 4,
+                                    showKeyPoints = true,
+                                    keyPoints = listOf(0f, 1f, 2f, 3f, 4f, 5f),
+                                    hapticEffect = SliderDefaults.SliderHapticEffect.None,
+                                )
+                            }
+                        }
                     }
                 }
                 5 -> {
@@ -1202,17 +1293,25 @@ private fun SavingsApp(
 }
 }
 
+/** Banner percentage: whole numbers at 0 decimals, otherwise exactly [decimals] places. */
+private fun formatBannerPercent(progress: Float, decimals: Int): String {
+    val percent = (progress * 100f).coerceIn(0f, 100f)
+    return if (decimals <= 0) "${percent.toInt()}%"
+    else String.format(Locale.ROOT, "%.${decimals.coerceIn(1, 5)}f%%", percent)
+}
+
 @Composable private fun Overview(goals: List<SavingGoal>, accounts: List<BankAccount>, appearance: Appearance, accent: Color) {
     val featured = goals.firstOrNull { it.id == appearance.featuredGoalId } ?: goals.firstOrNull()
     val completed = featured != null && featured.saved(accounts) >= featured.target
     val progress by animateFloatAsState(featured?.progress(accounts) ?: 0f, tween(650), label = "featured-progress")
+    val percentText = formatBannerPercent(progress, appearance.bannerDecimals)
     val status = appearance.bannerStyle == 0
     val foreground = if (status) MiuixTheme.colorScheme.onPrimaryContainer else MiuixTheme.colorScheme.onPrimary
     val subtle = foreground.copy(alpha = if (status) .7f else .82f)
     val base = if (status) MiuixTheme.colorScheme.primaryContainer else accent
     val fill = if (status) MiuixTheme.colorScheme.onPrimaryContainer else MiuixTheme.colorScheme.onPrimary
     Box(Modifier.fillMaxWidth().squircleSurface(color = base, cornerRadius = 20.dp)
-        .clearAndSetSemantics { contentDescription = tr("home.banner_description", featured?.title ?: tr("home.no_goal"), if (completed) tr("home.completed") else "${(progress * 100).toInt()}%") }) {
+        .clearAndSetSemantics { contentDescription = tr("home.banner_description", featured?.title ?: tr("home.no_goal"), if (completed) tr("home.completed") else percentText) }) {
         Box(Modifier.align(Alignment.TopEnd).padding(18.dp)) {
             if (completed) Text("🎉", fontSize = 44.sp)
             else Symbol("star", foreground.copy(alpha = .22f), Modifier.size(44.dp))
@@ -1227,7 +1326,7 @@ private fun SavingsApp(
                 Text(if (featured == null) tr("account.add_before_goal") else
                     "¥ ${Money.format(featured.saved(accounts))} / ¥ ${Money.format(featured.target)}",
                     style = MiuixTheme.textStyles.footnote1, color = subtle, modifier = Modifier.weight(1f))
-                Text(if (completed) tr("home.completed") else "${(progress * 100).toInt()}%",
+                Text(if (completed) tr("home.completed") else percentText,
                     style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold, color = foreground)
             }
             LinearProgressIndicator(progress = progress, height = 8.dp,
