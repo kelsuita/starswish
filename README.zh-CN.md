@@ -18,7 +18,7 @@
 
 ## 下载
 
-当前发布版本：[星愿攒钱 Dr.Ratio 1.6.0](https://github.com/kelsuita/starswish/releases/tag/v1.6.0)
+当前发布版本：[星愿攒钱 Intelligentsia Guild 1.6.1](https://github.com/kelsuita/starswish/releases/tag/v1.6.1)
 
 - `app-universal-release.apk`：通用架构包，不确定设备架构时选择此包
 - `app-armeabi-v7a-release.apk`：32 位 ARM 设备
@@ -32,13 +32,12 @@
 
 后续 release 更新将继续使用同一正式密钥签名，可直接升级正式签名的版本。请勿丢失或更换该密钥，否则 Android 将无法把新版本作为旧版本的更新安装。
 
-## Dr.Ratio 1.6.0 更新内容
+## Intelligentsia Guild 1.6.1 更新内容
 
 - 测试中：WebDAV同步
-- 统一弹窗为 BottomSheet 样式
-- 优化底部导航栏在横屏下的显示
-- 优化提示消息的显示时长和一致性
-- 修复部分界面卡片背景缺失、按压反馈形状不一致等问题
+- 优化横屏状态栏/摄像头区域与账户卡片布局
+- 心愿编辑小标题与设置页样式统一
+- 优化弹窗卡片与输入框对比度
 - 提高应用的稳定性和流畅度
 
 ## 快速开始

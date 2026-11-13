@@ -300,7 +300,7 @@ private fun SavingsApp(
         initialValue = if (expandedNavigation) NavigationRailValue.Expanded else NavigationRailValue.Collapsed,
     )
     val goalGrid = configuration.screenWidthDp >= 840
-    val accountGrid = configuration.screenWidthDp >= 1000
+    val accountGrid = goalGrid
     val layoutDirection = LocalLayoutDirection.current
     val versionName = remember { context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty() }
     var hitokoto by remember { mutableStateOf(store.hitokoto()) }
@@ -684,26 +684,9 @@ private fun SavingsApp(
         // sibling before NavDisplay, so an unclipped outgoing entry would paint over the rail and
         // leave a ghost there until the next full redraw.
         modifier = Modifier.weight(1f).fillMaxHeight()
-            // The cutout padding added below is inside this box, and nothing else paints it, so
-            // the window background would show through as a strip of a different shade next to
-            // the page background (obvious in the pure black dark theme).
+            // Nothing else paints the pane, so give it the page colour; the top bar and the
+            // scrolling content apply their own display-cutout insets.
             .background(pageBackground)
-            .then(
-                when {
-                    // The rail already insets the start cutout (camera end when the phone is
-                    // rotated). Pad the opposite end here and consume the horizontal cutout so
-                    // TopAppBar does not inset the pane a second time and push the title off the
-                    // content column.
-                    wideLayout && !useFloatingNav -> Modifier
-                        .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.End))
-                        .consumeWindowInsets(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
-                    // Without the rail nothing owns the start cutout, so inset both sides.
-                    wideLayout -> Modifier
-                        .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
-                        .consumeWindowInsets(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
-                    else -> Modifier
-                },
-            )
             .clipToBounds(),
     ) {
     // The pane width is measured (rather than derived from the rail constants) so the title can
@@ -810,7 +793,6 @@ private fun SavingsApp(
         val pageScrollState = key(displayedPage) { rememberScrollState() }
         var viewportTop by remember { mutableFloatStateOf(0f) }
         var viewportHeight by remember { mutableFloatStateOf(0f) }
-        val statusBarTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         Scaffold(topBar = {
             Box(Modifier.fillMaxWidth()
                 .then(if (backdrop != null) Modifier.textureBlur(backdrop, RectangleShape, BlurDefaults.BlurRadius,
@@ -896,13 +878,6 @@ private fun SavingsApp(
                             else if (displayedPage == 7) tr("common.back_to_accounts") else tr("common.back_to_settings"))
                     }
                 })
-                // In landscape the bar blur samples the page and tints the status-bar strip.
-                // Cover that strip with the plain page colour so the system icons sit on the
-                // same background as the page instead of a coloured band.
-                if (landscape && backdrop != null && statusBarTopPadding > 0.dp) {
-                    Box(Modifier.align(Alignment.TopCenter).fillMaxWidth()
-                        .height(statusBarTopPadding).background(pageBackground))
-                }
             }
         }, containerColor = pageBackground) { pagePadding ->
         Box(Modifier.fillMaxSize().onGloballyPositioned {
@@ -918,6 +893,7 @@ private fun SavingsApp(
             .overScrollVertical()
             .nestedScroll(contentScrollBehavior.nestedScrollConnection)
             .verticalScroll(pageScrollState)
+            .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
             .padding(start = if (wideLayout) 32.dp else maxOf(16.dp, pagePadding.calculateStartPadding(layoutDirection)),
                 end = maxOf(if (wideLayout) 32.dp else 16.dp, pagePadding.calculateEndPadding(layoutDirection)),
                 top = pagePadding.calculateTopPadding(),
@@ -1408,13 +1384,22 @@ private fun SavingsApp(
             Column(Modifier.fillMaxWidth()) {
                 SmallTitle(text = tr("webdav.account_config"), textColor = accent,
                     insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
-                Card(Modifier.fillMaxWidth()) {
+                Card(
+                    Modifier.fillMaxWidth(),
+                    colors = CardDefaults.defaultColors(
+                        color = MiuixTheme.colorScheme.surfaceContainerHigh,
+                        contentColor = MiuixTheme.colorScheme.onSurfaceContainer,
+                    ),
+                ) {
                     Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        TextField(value = webDavUrl, onValueChange = { webDavUrl = it }, label = tr("webdav.url"))
-                        TextField(value = webDavAccount, onValueChange = { webDavAccount = it }, label = tr("webdav.account"))
+                        TextField(value = webDavUrl, onValueChange = { webDavUrl = it }, label = tr("webdav.url"),
+                            colors = sheetFieldColors())
+                        TextField(value = webDavAccount, onValueChange = { webDavAccount = it }, label = tr("webdav.account"),
+                            colors = sheetFieldColors())
                         TextField(value = webDavPassword, onValueChange = { webDavPassword = it }, label = tr("webdav.password"),
-                            visualTransformation = PasswordVisualTransformation(), singleLine = true)
+                            visualTransformation = PasswordVisualTransformation(), singleLine = true,
+                            colors = sheetFieldColors())
                     }
                 }
                 if (webDavBusy) Text(tr("webdav.reading"), color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
@@ -1708,7 +1693,8 @@ private fun formatBannerPercent(progress: Float, decimals: Int): String {
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
             colors = dialogFieldColors(dateError.isNotEmpty()))
         FieldError(dateError)
-        Text(tr("goal.linked_accounts"), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        SmallTitle(text = tr("goal.linked_accounts"), textColor = MiuixTheme.colorScheme.primary,
+            insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
         if (accounts.isEmpty()) {
             Note(tr("account.empty_before_goal"))
             Button(onClick = onAddAccount, modifier = Modifier.fillMaxWidth()) { Text(tr("account.add_first")) }
@@ -1728,7 +1714,8 @@ private fun formatBannerPercent(progress: Float, decimals: Int): String {
             }
         }
         FieldError(accountError)
-        Text(tr("goal.calculation_mode"), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        SmallTitle(text = tr("goal.calculation_mode"), textColor = MiuixTheme.colorScheme.primary,
+            insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
         Card(Modifier.fillMaxWidth(), colors = sheetCardColors()) {
             RadioButtonPreference(
                 title = tr("goal.current_balance"),
@@ -1822,6 +1809,12 @@ private fun formatBannerPercent(progress: Float, decimals: Int): String {
         )
     }
 }
+
+@Composable private fun sheetFieldColors(): TextFieldColors = TextFieldDefaults.textFieldColors(
+    backgroundColor = MiuixTheme.colorScheme.background,
+    labelColor = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+    borderColor = MiuixTheme.colorScheme.primary,
+)
 
 @Composable private fun dialogFieldColors(invalid: Boolean): TextFieldColors = TextFieldDefaults.textFieldColors(
     backgroundColor = if (invalid) MiuixTheme.colorScheme.errorContainer else MiuixTheme.colorScheme.secondaryContainer,

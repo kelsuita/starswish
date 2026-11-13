@@ -18,7 +18,7 @@
 
 ## 下載
 
-目前發布版本：[星願攢錢 Dr.Ratio 1.6.0](https://github.com/kelsuita/starswish/releases/tag/v1.6.0)
+目前發布版本：[星願攢錢 Intelligentsia Guild 1.6.1](https://github.com/kelsuita/starswish/releases/tag/v1.6.1)
 
 - `app-universal-release.apk`：通用架構包，不確定裝置架構時選擇此包
 - `app-armeabi-v7a-release.apk`：32 位元 ARM 裝置

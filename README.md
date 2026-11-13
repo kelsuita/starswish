@@ -30,7 +30,7 @@ background sync, no transaction history is read, and nothing is confirmed on you
 
 ## Download
 
-Current release: [Starwish Dr.Ratio 1.6.0](https://github.com/kelsuita/starswish/releases/tag/v1.6.0)
+Current release: [Starwish Intelligentsia Guild 1.6.1](https://github.com/kelsuita/starswish/releases/tag/v1.6.1)
 
 - `app-universal-release.apk`: universal package, choose this if you are unsure about the ABI
 - `app-armeabi-v7a-release.apk`: 32-bit ARM devices
@@ -45,21 +45,20 @@ Current release: [Starwish Dr.Ratio 1.6.0](https://github.com/kelsuita/starswish
 Future releases will keep using the same release key, so release builds can be upgraded in place.
 Do not lose or replace that key — Android will refuse to install a new version as an update otherwise.
 
-## What's new in Dr.Ratio 1.6.0
+## What's new in Intelligentsia Guild 1.6.1
 
 - WebDAV sync (testing)
-- Unified popups as bottom sheets
-- Improved landscape bottom navigation and transient message timing
-- Fixed missing card backgrounds and mismatched press-feedback shapes
+- Improved landscape status bar/camera-cutout and account card layout
+- Goal editor section headers now match settings styling
+- Better popup card and input field contrast
 - Stability and smoothness improvements
 
-## Dr.Ratio 1.6.0 更新内容
+## Intelligentsia Guild 1.6.1 更新内容
 
 - 测试中：WebDAV同步
-- 统一弹窗为 BottomSheet 样式
-- 优化底部导航栏在横屏下的显示
-- 优化提示消息的显示时长和一致性
-- 修复部分界面卡片背景缺失、按压反馈形状不一致等问题
+- 优化横屏状态栏/摄像头区域与账户卡片布局
+- 心愿编辑小标题与设置页样式统一
+- 优化弹窗卡片与输入框对比度
 - 提高应用的稳定性和流畅度
 
 ## Quick start
