@@ -5,6 +5,8 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.util.Log
+import android.widget.Toast
 import android.os.Bundle
 import android.provider.Settings
 import android.window.OnBackInvokedCallback
@@ -92,6 +94,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -110,8 +113,12 @@ import top.yukonga.miuix.kmp.utils.pagerGestureOverride
 import top.yukonga.miuix.kmp.utils.springAnimateToPage
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.nav.core.NavDisplay
+import top.yukonga.miuix.kmp.nav.core.NavDisplayEffects
 import top.yukonga.miuix.kmp.nav.core.NavKey
 import top.yukonga.miuix.kmp.nav.core.rememberNavBackStack
+import top.yukonga.miuix.kmp.nav.core.rememberNavSystemCornerRadius
+import top.yukonga.miuix.kmp.nav.transition.NavSwipeDirection
+import top.yukonga.miuix.kmp.nav.transition.NavTransitions
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
@@ -132,6 +139,12 @@ import top.yukonga.miuix.kmp.squircle.squircleSurface
 import com.kelsuita.starswish.data.*
 import com.kelsuita.starswish.data.fetchHitokoto
 import com.kelsuita.starswish.sync.XiaoxingAccessibilityService
+import com.kelsuita.starswish.sync.WebDavClient
+import com.kelsuita.starswish.sync.WebDavSettings
+import com.kelsuita.starswish.sync.SnapshotBalanceReader
+import com.kelsuita.starswish.sync.XiaoxingBackupDecryptor
+import com.kelsuita.starswish.sync.SyncError
+import java.io.File
 import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -168,6 +181,8 @@ private fun monetSeedColor(context: Context): Color? {
 }
 @Serializable
 private data class AppRoute(val page: Int) : NavKey
+/** One confirmed-but-not-yet-applied balance change shown in the import confirmation sheet. */
+private data class WebDavBalanceChange(val accountId: String, val name: String, val before: Long, val after: Long)
 private val NavIcons = listOf(MiuixIcons.Home, MiuixIcons.BankCards, MiuixIcons.Settings)
 // A full backup can approach the Bundle transaction limit. Persist the pending import across
 // recreation only when it is comfortably small; otherwise the user can pick the file again.
@@ -329,11 +344,23 @@ private fun SavingsApp(
             navigationJob = scope.launch { pagerState.springAnimateToPage(page) }
         }
     }
+    fun popRoute() {
+        if (backStack.size > 1) backStack.removeLastOrNull()
+    }
     var editingGoalId by rememberSaveable { mutableStateOf<String?>(null) }
     var goalEditor by rememberSaveable { mutableStateOf(false) }
     var editingAccountId by rememberSaveable { mutableStateOf<String?>(null) }
     var accountEditor by rememberSaveable { mutableStateOf(false) }
     var disclosure by rememberSaveable { mutableStateOf(false) }
+    var webDavSheet by rememberSaveable { mutableStateOf(false) }
+    var webDavBusy by remember { mutableStateOf(false) }
+    var webDavUrl by rememberSaveable { mutableStateOf("") }
+    var webDavAccount by rememberSaveable { mutableStateOf("") }
+    var webDavPassword by remember { mutableStateOf("") }
+    var webDavAccountId by rememberSaveable { mutableStateOf<String?>(null) }
+    var webDavChanges by remember { mutableStateOf<List<WebDavBalanceChange>>(emptyList()) }
+    var webDavChangesVisible by remember { mutableStateOf(false) }
+    var aboutIconTaps by rememberSaveable { mutableIntStateOf(0) }
     // Delete targets are intentionally not saved across recreation: the confirmation carries
     // no user input, so restoring it is not worth serializing a whole model object. Visibility
     // is separate from the target so the dialog keeps its content while it hides.
@@ -372,6 +399,10 @@ private fun SavingsApp(
     }
     val accounts = remember(revision) { store.accounts() }
     val goals = remember(revision) { store.goals() }
+    val developerMode = remember(revision) { store.developerModeEnabled() }
+    val webDavMode = remember(revision) { store.webDavBalanceEnabled() }
+    val webDavConnected = remember(revision) { store.webDavConnected() }
+    val webDavActive = developerMode && webDavMode
     val editingGoal = goals.firstOrNull { it.id == editingGoalId }
     val editingAccount = accounts.firstOrNull { it.id == editingAccountId }
     val candidate = remember(revision) { store.candidate() }
@@ -466,6 +497,86 @@ private fun SavingsApp(
             } else notify(tr("accessibility.open_account_page", account.name))
         }
     }
+    fun beginWebDavRead(accountId: String? = null) {
+        if (!store.developerModeEnabled() || !store.webDavBalanceEnabled()) return
+        webDavAccountId = accountId
+        webDavUrl = store.webDavUrl()
+        webDavAccount = store.webDavAccount()
+        webDavPassword = runCatching { WebDavSettings.decryptPassword(store.encryptedWebDavPassword()) }
+            .getOrElse { notify(it.message ?: tr("common.operation_failed")); "" }
+        webDavSheet = true
+    }
+    fun readWebDav(accountId: String? = null) {
+        if (webDavBusy || webDavChangesVisible || !store.developerModeEnabled() || !store.webDavBalanceEnabled()) return
+        val saveCredentials = webDavSheet
+        val requestedAccountId = if (saveCredentials) webDavAccountId else accountId
+        webDavBusy = true
+        scope.launch {
+            val temp = File(context.cacheDir, "webdav-${UUID.randomUUID()}").apply { mkdirs() }
+            try {
+                val url = if (saveCredentials) webDavUrl else store.webDavUrl()
+                val username = if (saveCredentials) webDavAccount else store.webDavAccount()
+                val password = if (saveCredentials) webDavPassword else WebDavSettings.decryptPassword(store.encryptedWebDavPassword())
+                if (username.isBlank() || password.isBlank()) throw SyncError("webdav.error_credentials")
+                val client = WebDavClient(url, username, password)
+                val backup = client.latestBackup()
+                val archive = File(temp, "backup.lch")
+                val database = File(temp, "snapshot.mdb")
+                withContext(Dispatchers.IO) { client.download(backup, archive) }
+                withContext(Dispatchers.IO) { XiaoxingBackupDecryptor.decrypt(archive, database) }
+                val balances = SnapshotBalanceReader.read(database)
+                if (saveCredentials) withContext(Dispatchers.IO) {
+                    store.saveWebDavSettings(url, username, WebDavSettings.encryptPassword(password))
+                }
+                val current = store.accounts().let { accounts ->
+                    if (requestedAccountId == null) accounts else accounts.filter { it.id == requestedAccountId }
+                }
+                var matched = 0
+                val changes = current.mapNotNull { account ->
+                    val matches = balances.filter { it.name == account.name }
+                    // Accounts this backup does not contain keep their current balance.
+                    if (matches.isEmpty()) {
+                        if (requestedAccountId != null) throw SyncError("webdav.error_empty_accounts")
+                        return@mapNotNull null
+                    }
+                    if (matches.size != 1) throw SyncError("webdav.error_match", account.name)
+                    val match = matches.single()
+                    if (match.currency != 0) throw SyncError("webdav.error_currency", account.name)
+                    matched++
+                    if (match.cents == account.balance) null
+                    else WebDavBalanceChange(account.id, account.name, account.balance, match.cents)
+                }
+                if (matched == 0) throw SyncError("webdav.error_empty_accounts")
+                // Balance writes and the first successful sync require explicit confirmation.
+                refresh()
+                webDavSheet = false
+                webDavAccountId = null
+                webDavChanges = changes
+                webDavChangesVisible = true
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                Log.w("StarwishWebDav", "WebDAV balance import failed", error)
+                val message = if (error is SyncError) error.arg?.let { tr(error.key, it) } ?: tr(error.key)
+                    else tr("webdav.error_read")
+                notify(message)
+            } finally {
+                temp.deleteRecursively()
+                webDavBusy = false
+            }
+        }
+    }
+    fun confirmWebDavChanges() {
+        if (!webDavChangesVisible) return
+        val changes = webDavChanges
+        if (!mutate {
+            if (changes.isNotEmpty()) {
+                store.saveAccountBalances(changes.associate { it.accountId to it.after }, System.currentTimeMillis())
+            }
+            store.markWebDavConnected()
+        }) return
+        webDavChangesVisible = false
+        notify(tr("webdav.success", changes.size))
+    }
     val accent = MiuixTheme.colorScheme.primary
     // Grouped cards use surfaceContainer; surface keeps their boundary visible in
     // the stock palette too (background and surfaceContainer are both white).
@@ -475,7 +586,7 @@ private fun SavingsApp(
     val pagerBackState = rememberNavigationEventState(NavigationEventInfo.None)
     val pagerBackEnabled = backStack.size == 1 && selectedTab != 0 &&
         !goalEditor && !accountEditor && !disclosure &&
-        !deletingGoalVisible && !deletingAccountVisible && !importVisible
+        !deletingGoalVisible && !deletingAccountVisible && !importVisible && !bannerDecimalsSheet
     if (appearance.predictiveBackEnabled) {
         NavigationBackHandler(
             state = pagerBackState,
@@ -486,10 +597,11 @@ private fun SavingsApp(
         // Keep normal back navigation while opting out of the predictive transition.
         BackHandler(enabled = pagerBackEnabled) { navigate(0) }
     }
-    val backProgress = if (appearance.predictiveBackEnabled) {
-        (pagerBackState.transitionState as? NavigationEventTransitionState.InProgress)
-            ?.latestEvent?.progress ?: 0f
+    val pagerBackInProgress = pagerBackState.transitionState as? NavigationEventTransitionState.InProgress
+    val backProgress = if (appearance.predictiveBackEnabled && pagerBackEnabled) {
+        pagerBackInProgress?.latestEvent?.progress ?: 0f
     } else 0f
+
     // NavDisplay has its own predictive handler for pushed routes, and the activity can animate
     // to home as well. When the preference is off, take over back with a plain high-priority
     // callback so no predictive gesture starts anywhere in the app. Dialogs keep their own
@@ -497,14 +609,14 @@ private fun SavingsApp(
     val blockPredictive = !appearance.predictiveBackEnabled &&
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
         !goalEditor && !accountEditor && !disclosure &&
-        !deletingGoalVisible && !deletingAccountVisible && !importVisible
+        !deletingGoalVisible && !deletingAccountVisible && !importVisible && !bannerDecimalsSheet
     if (blockPredictive) {
         val activity = context as? ComponentActivity
         DisposableEffect(activity, backStack.size, selectedTab, goalEditor, accountEditor, disclosure,
             deletingGoalVisible, deletingAccountVisible, importVisible) {
             val callback = OnBackInvokedCallback {
                 when {
-                    backStack.size > 1 -> backStack.removeLastOrNull()
+                    backStack.size > 1 -> popRoute()
                     selectedTab != 0 -> navigate(0)
                     else -> activity?.finish()
                 }
@@ -516,6 +628,16 @@ private fun SavingsApp(
                 activity?.onBackInvokedDispatcher?.unregisterOnBackInvokedCallback(callback)
             }
         }
+    }
+    // Miuix owns the cross-cutting effect layer: the device screen corner clips the sliding page on
+    // a phone, while a wide-shell pane is not a screen edge and keeps square corners. The backdrop
+    // fills whatever the scaled-down layers reveal so it reads as the page background.
+    val navCornerRadius = rememberNavSystemCornerRadius()
+    val navEffects = remember(wideLayout, navCornerRadius, pageBackground) {
+        NavDisplayEffects(
+            cornerClipRadius = if (wideLayout) 0.dp else navCornerRadius,
+            backdropColor = pageBackground,
+        )
     }
     // Secondary pages keep the rail visible and map back to the tab that owns them, so the
     // window-size change does not introduce a second navigation state. Tab destinations all
@@ -583,9 +705,19 @@ private fun SavingsApp(
     NavDisplay(
         backStack = backStack,
         modifier = Modifier.fillMaxSize(),
-        onBack = { backStack.removeLastOrNull() },
+        onBack = { popRoute() },
+        transition = NavTransitions.MiuixDefault,
+        effects = navEffects,
     ) {
-      entry<AppRoute> { route ->
+      // NavDisplay owns both system predictive back and in-content swipe dismissal, including
+      // cancellation and settling. Physical swipe directions must be selected explicitly for RTL.
+      entry<AppRoute>(
+          swipeDismiss = when {
+              !appearance.predictiveBackEnabled -> NavSwipeDirection.None
+              layoutDirection == androidx.compose.ui.unit.LayoutDirection.Rtl -> NavSwipeDirection.RightToLeft
+              else -> NavSwipeDirection.LeftToRight
+          },
+      ) { route ->
         val page = if (route.page >= 3) route.page else selectedTab
         // Wide layouts keep the content in a centred 880dp column. Give the bar title the same
         // gutter so the large title starts on the column instead of floating at the rail edge.
@@ -672,7 +804,7 @@ private fun SavingsApp(
                     colors = BlurDefaults.blurColors(blendColors = listOf(BlendColorEntry(pageBackground.copy(alpha = .8f))))) else Modifier)
                 .background(if (backdrop != null) Color.Transparent else pageBackground)) {
                 TopAppBar(
-                    title = when (displayedPage) { 0 -> tr("app.name"); 1 -> tr("account.title"); 2 -> tr("settings.title"); 4 -> tr("theme.title"); 5 -> tr("settings.import_export"); 6 -> tr("sort.goals_title"); 7 -> tr("sort.accounts_title"); else -> tr("about.title") },
+                    title = when (displayedPage) { 0 -> tr("app.name"); 1 -> tr("account.title"); 2 -> tr("settings.title"); 4 -> tr("theme.title"); 5 -> tr("settings.import_export"); 6 -> tr("sort.goals_title"); 7 -> tr("sort.accounts_title"); 8 -> tr("settings.developer_options"); else -> tr("about.title") },
                     subtitle = "",
                     color = barColor,
                     scrollBehavior = contentScrollBehavior,
@@ -746,7 +878,7 @@ private fun SavingsApp(
                     }
                 },
                 navigationIcon = {
-                    if (displayedPage >= 3) IconButton(onClick = { backStack.removeLastOrNull() }) {
+                    if (displayedPage >= 3) IconButton(onClick = { popRoute() }) {
                         Icon(MiuixIcons.Back, contentDescription = if (displayedPage == 6) tr("common.back_to_goals")
                             else if (displayedPage == 7) tr("common.back_to_accounts") else tr("common.back_to_settings"))
                     }
@@ -822,7 +954,7 @@ private fun SavingsApp(
                             }
                         }
                     }
-                    if (request != null && request.expiresAt > System.currentTimeMillis()) {
+                    if (!webDavActive && request != null && request.expiresAt > System.currentTimeMillis()) {
                         Panel {
                             Text(tr("accessibility.waiting_page"), style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold)
                             Note(tr("accessibility.read_steps_detail"))
@@ -834,23 +966,44 @@ private fun SavingsApp(
                             IconTile("link", accent)
                             Column(Modifier.weight(1f)) {
                                 Text(tr("app.xiaoxing"), style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold)
-                                Text(if (enabled) tr("accessibility.read_enabled") else tr("accessibility.enable_read_summary"), style = MiuixTheme.textStyles.footnote1,
+                                Text(when {
+                                    webDavActive -> tr("account.webdav_read_summary")
+                                    enabled -> tr("accessibility.read_enabled")
+                                    else -> tr("accessibility.enable_read_summary")
+                                }, style = MiuixTheme.textStyles.footnote1,
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                             }
-                            Badge(if (enabled) tr("accessibility.granted") else tr("accessibility.not_granted"), accent)
+                            Badge(when {
+                                webDavActive -> if (webDavConnected) tr("account.webdav_connected")
+                                    else tr("account.webdav_not_connected")
+                                enabled -> tr("accessibility.granted")
+                                else -> tr("accessibility.not_granted")
+                            }, accent)
                         }
-                        Note(tr("accessibility.no_public_api_note"))
-                        Button(onClick = {
-                            if (enabled) {
-                                openReaderSettings()
-                                notify(tr("accessibility.disable_in_settings"))
-                            } else {
-                                disclosure = true
+                        if (!webDavActive) {
+                            Note(tr("accessibility.no_public_api_note"))
+                            Button(onClick = {
+                                if (enabled) {
+                                    openReaderSettings()
+                                    notify(tr("accessibility.disable_in_settings"))
+                                } else {
+                                    disclosure = true
+                                }
+                            }, modifier = Modifier.fillMaxWidth(),
+                                colors = if (enabled) ButtonDefaults.buttonColorsPrimary()
+                                else ButtonDefaults.buttonColors()) {
+                                Text(if (enabled) tr("accessibility.disable_service") else tr("accessibility.set_up_permission"))
                             }
-                        }, modifier = Modifier.fillMaxWidth(),
-                            colors = if (enabled) ButtonDefaults.buttonColorsPrimary()
-                            else ButtonDefaults.buttonColors()) {
-                            Text(if (enabled) tr("accessibility.disable_service") else tr("accessibility.set_up_permission"))
+                        } else {
+                            Button(onClick = { beginWebDavRead() }, modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColorsPrimary(), enabled = !webDavBusy) {
+                                Text(tr("webdav.button"))
+                            }
+                            if (webDavConnected) {
+                                Button(onClick = { readWebDav() }, modifier = Modifier.fillMaxWidth(), enabled = !webDavBusy) {
+                                    Text(tr("webdav.reread"))
+                                }
+                            }
                         }
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
@@ -878,7 +1031,14 @@ private fun SavingsApp(
                             Text(tr("account.updated_at", timeLabel(account.updatedAt)), style = MiuixTheme.textStyles.footnote1,
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(onClick = { capture(account) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColorsPrimary()) {
+                                Button(onClick = {
+                                    if (webDavActive) {
+                                        if (webDavConnected) {
+                                            Toast.makeText(context, tr("webdav.reading_toast"), Toast.LENGTH_SHORT).show()
+                                            readWebDav(account.id)
+                                        } else beginWebDavRead(account.id)
+                                    } else capture(account)
+                                }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColorsPrimary()) {
                                     Text(tr("accessibility.read_balance"))
                                 }
                                 Button(onClick = { editingAccountId = account.id; accountEditor = true }) { Text(tr("common.edit")) }
@@ -968,6 +1128,10 @@ private fun SavingsApp(
                         insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
                     Card(Modifier.fillMaxWidth()) {
                         ArrowPreference(title = tr("about.title"), summary = tr("about.help_and_privacy"), onClick = { navigate(3) })
+                        if (developerMode) {
+                            ArrowPreference(title = tr("settings.developer_options"),
+                                summary = tr("settings.developer_options_summary"), onClick = { navigate(8) })
+                        }
                     }
                 }
                 4 -> {
@@ -1127,7 +1291,13 @@ private fun SavingsApp(
                 }
                 3 -> {
                     Panel {
-                        IconTile("star", accent)
+                        Box(Modifier.clickable {
+                            aboutIconTaps++
+                            if (aboutIconTaps >= 10 && !store.developerModeEnabled()) {
+                                aboutIconTaps = 0
+                                if (mutate { store.setDeveloperMode(true) }) notify(tr("webdav.developer_enabled"))
+                            }
+                        }) { IconTile("star", accent) }
                         Text(tr("app.name_full"), fontWeight = FontWeight.Bold, fontSize = 24.sp)
                         Text("$versionName  /  ${tr("about.made_by_kelsuita")}", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                     }
@@ -1159,6 +1329,62 @@ private fun SavingsApp(
                     Button(onClick = {
                         context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://cxincx.com/support/scheme.html")))
                     }, modifier = Modifier.fillMaxWidth()) { Text(tr("about.xiaoxing_docs")) }
+                }
+                8 -> {
+                    Card(Modifier.fillMaxWidth()) {
+                        SwitchPreference(title = tr("settings.developer_options"),
+                            summary = tr("settings.developer_options_summary"),
+                            checked = developerMode,
+                            onCheckedChange = { value -> mutate { store.setDeveloperMode(value) } })
+                    }
+                    if (developerMode) {
+                        SmallTitle(text = tr("settings.developer_accounts"), textColor = accent,
+                            insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
+                        Card(Modifier.fillMaxWidth()) {
+                            SwitchPreference(title = tr("settings.webdav_balance"),
+                                summary = tr("settings.webdav_balance_summary"),
+                                checked = webDavMode,
+                                onCheckedChange = { value -> mutate { store.setWebDavBalanceEnabled(value) } })
+                        }
+                    }
+                }
+            }
+            OverlayBottomSheet(
+                show = webDavSheet,
+                title = tr("webdav.title"),
+                startAction = { IconButton(onClick = { webDavSheet = false }) { Icon(MiuixIcons.Close, contentDescription = tr("common.cancel"), tint = MiuixTheme.colorScheme.onBackground) } },
+                endAction = { IconButton(onClick = { readWebDav() }, enabled = !webDavBusy) { Icon(MiuixIcons.Ok, contentDescription = tr("common.confirm"), tint = MiuixTheme.colorScheme.onBackground) } },
+                onDismissRequest = { if (!webDavBusy) webDavSheet = false },
+                insideMargin = DpSize(24.dp, 48.dp),
+            ) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    TextField(value = webDavUrl, onValueChange = { webDavUrl = it }, label = tr("webdav.url"))
+                    TextField(value = webDavAccount, onValueChange = { webDavAccount = it }, label = tr("webdav.account"))
+                    TextField(value = webDavPassword, onValueChange = { webDavPassword = it }, label = tr("webdav.password"),
+                        visualTransformation = PasswordVisualTransformation(), singleLine = true)
+                    if (webDavBusy) Text(tr("webdav.reading"), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                }
+            }
+            OverlayBottomSheet(
+                show = webDavChangesVisible,
+                title = tr("webdav.confirm_title"),
+                startAction = { IconButton(onClick = { webDavChangesVisible = false }) { Icon(MiuixIcons.Close, contentDescription = tr("common.cancel"), tint = MiuixTheme.colorScheme.onBackground) } },
+                endAction = { IconButton(onClick = { confirmWebDavChanges() }) { Icon(MiuixIcons.Ok, contentDescription = tr("common.confirm"), tint = MiuixTheme.colorScheme.onBackground) } },
+                onDismissRequest = { webDavChangesVisible = false },
+                insideMargin = DpSize(24.dp, 48.dp),
+            ) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (webDavChanges.isEmpty()) Text(tr("webdav.no_changes"))
+                    webDavChanges.forEach { change ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text(change.name, style = MiuixTheme.textStyles.body1, maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f))
+                            Text("¥ ${Money.format(change.before)} → ¥ ${Money.format(change.after)}",
+                                style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
             Spacer(Modifier.height(8.dp))

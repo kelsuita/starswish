@@ -8,6 +8,33 @@ import org.json.JSONObject
 class SavingsStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("savings_v1", Context.MODE_PRIVATE)
 
+    fun developerModeEnabled(): Boolean = prefs.getBoolean("developer_mode", false)
+    fun setDeveloperMode(enabled: Boolean) {
+        check(prefs.edit().putBoolean("developer_mode", enabled).commit()) { tr("common.save_failed") }
+    }
+    fun webDavBalanceEnabled(): Boolean = prefs.getBoolean("webdav_balance_enabled", false)
+    fun setWebDavBalanceEnabled(enabled: Boolean) {
+        check(prefs.edit().putBoolean("webdav_balance_enabled", enabled).commit()) { tr("common.save_failed") }
+    }
+    fun webDavUrl(): String = prefs.getString("webdav_url", "").orEmpty()
+    fun webDavAccount(): String = prefs.getString("webdav_account", "").orEmpty()
+    fun encryptedWebDavPassword(): String = prefs.getString("webdav_password", "").orEmpty()
+    /** Connected means saved credentials plus at least one confirmed balance import. */
+    fun webDavConnected(): Boolean = prefs.getBoolean("webdav_connected", false) &&
+        webDavAccount().isNotBlank() && encryptedWebDavPassword().isNotBlank()
+    fun markWebDavConnected() {
+        check(prefs.edit().putBoolean("webdav_connected", true).commit()) { tr("common.save_failed") }
+    }
+    fun saveWebDavSettings(url: String, account: String, encryptedPassword: String) {
+        val changed = url.trim() != webDavUrl() || account.trim() != webDavAccount() ||
+            encryptedPassword != encryptedWebDavPassword()
+        val editor = prefs.edit().putString("webdav_url", url.trim())
+            .putString("webdav_account", account.trim())
+            .putString("webdav_password", encryptedPassword)
+        if (changed) editor.putBoolean("webdav_connected", false)
+        check(editor.commit()) { tr("common.save_failed") }
+    }
+
     fun hitokoto(): String? = prefs.getString("hitokoto", null)
     fun saveHitokoto(value: String) = put("hitokoto", value)
 
@@ -140,6 +167,17 @@ class SavingsStore(context: Context) {
         require(existing.any { it.id == account.id } || existing.size < 50) { tr("account.error_max_accounts") }
         writeAccounts(existing.map { if (it.id == account.id) account.copy(createdAt = it.createdAt) else it }
             .let { if (existing.any { it.id == account.id }) it else it + account.copy(createdAt = System.currentTimeMillis()) })
+    }
+    @Synchronized fun saveAccountBalances(balances: Map<String, Long>, updatedAt: Long) {
+        val existing = accounts()
+        require(balances.isNotEmpty() && balances.keys.all { id -> existing.any { it.id == id } })
+        require(balances.values.all { it in -Money.MAX_CENTS..Money.MAX_CENTS })
+        val updated = existing.map { account ->
+            balances[account.id]?.let { cents ->
+                account.copy(balance = cents, updatedAt = updatedAt, source = "account.source_xiaoxing")
+            } ?: account
+        }
+        writeAccounts(updated)
     }
     @Synchronized fun saveGoal(goal: SavingGoal) {
         require(goal.title.isNotBlank() && goal.title.length <= 40)

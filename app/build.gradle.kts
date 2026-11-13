@@ -121,7 +121,7 @@ android {
         minSdk = 26
         targetSdk = 37
         versionCode = 17
-        versionName = "Hanya 1.5.7"
+        versionName = "Huohuo 1.5.9"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     splits {
@@ -162,6 +162,8 @@ android {
 
 dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+    implementation("net.lingala.zip4j:zip4j:2.11.5")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.compose.foundation:foundation:1.12.1")
     implementation("androidx.compose.ui:ui:1.12.1")
