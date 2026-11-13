@@ -18,7 +18,7 @@
 
 ## 下载
 
-当前发布版本：[星愿攒钱 Synesthesia Beacon 1.5.5](https://github.com/kelsuita/starswish/releases/tag/v1.5.5)
+当前发布版本：[星愿攒钱 Dr.Ratio 1.6.0](https://github.com/kelsuita/starswish/releases/tag/v1.6.0)
 
 - `app-universal-release.apk`：通用架构包，不确定设备架构时选择此包
 - `app-armeabi-v7a-release.apk`：32 位 ARM 设备
@@ -31,6 +31,15 @@
 - 正式签名与 1.0.0 初次发布时使用的调试签名不同。之前安装了旧版的用户通常需要先卸载旧版；卸载会删除应用数据，请先妥善保留重要信息
 
 后续 release 更新将继续使用同一正式密钥签名，可直接升级正式签名的版本。请勿丢失或更换该密钥，否则 Android 将无法把新版本作为旧版本的更新安装。
+
+## Dr.Ratio 1.6.0 更新内容
+
+- 测试中：WebDAV同步
+- 统一弹窗为 BottomSheet 样式
+- 优化底部导航栏在横屏下的显示
+- 优化提示消息的显示时长和一致性
+- 修复部分界面卡片背景缺失、按压反馈形状不一致等问题
+- 提高应用的稳定性和流畅度
 
 ## 快速开始
 
