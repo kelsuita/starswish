@@ -120,7 +120,7 @@ android {
         applicationId = "com.kelsuita.starswish"
         minSdk = 26
         targetSdk = 37
-        versionCode = 17
+        versionCode = 19
         versionName = "Huohuo 1.5.9"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
