@@ -114,6 +114,9 @@ import kotlin.math.sin
 
 private val LocalIosTabScale = staticCompositionLocalOf { { 1f } }
 
+/** Bar blur radius in pixels; 128 gives the frosted iOS-like glass look. */
+private const val BAR_BLUR_RADIUS_PX = 128f
+
 private val iosIndicatorSpecular: Highlight = Highlight(
     width = 1.dp,
     alpha = 1f,
@@ -415,7 +418,7 @@ internal fun IosLiquidGlassNavigationBar(
         // Keep the horizontal bar the same width in portrait and landscape. The 56dp allowance
         // keeps a small side margin on narrow phones, while the cap prevents a wide bar on
         // landscape/tablet screens.
-        val surfaceWidth = minOf(maxWidth - 56.dp, 340.dp).coerceAtLeast(0.dp)
+        val surfaceWidth = minOf(maxWidth - 56.dp, 300.dp).coerceAtLeast(0.dp)
         Box(
             modifier = Modifier
                 .padding(bottom = bottomPaddingValue)
@@ -452,8 +455,8 @@ internal fun IosLiquidGlassNavigationBar(
                                         padding = maxOf(padding, 40.dp.toPx())
                                         vibrancy()
                                         blur(
-                                            4.dp.toPx(),
-                                            4.dp.toPx(),
+                                            BAR_BLUR_RADIUS_PX,
+                                            BAR_BLUR_RADIUS_PX,
                                         )
                                         lens(
                                             refractionHeight = 24.dp.toPx(),
@@ -505,7 +508,7 @@ internal fun IosLiquidGlassNavigationBar(
                                 shape = { pillShape },
                                 effects = {
                                     vibrancy()
-                                    blur(4.dp.toPx(), 4.dp.toPx())
+                                    blur(BAR_BLUR_RADIUS_PX, BAR_BLUR_RADIUS_PX)
                                     lens(
                                         refractionHeight = 24.dp.toPx(),
                                         refractionAmount = 24.dp.toPx(),

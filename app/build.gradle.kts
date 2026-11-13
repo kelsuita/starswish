@@ -120,8 +120,8 @@ android {
         applicationId = "com.kelsuita.starswish"
         minSdk = 26
         targetSdk = 37
-        versionCode = 19
-        versionName = "Huohuo 1.5.9"
+        versionCode = 20
+        versionName = "Dr.Ratio 1.6.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     splits {

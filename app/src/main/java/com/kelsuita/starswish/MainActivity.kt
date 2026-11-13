@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
-import android.widget.Toast
 import android.os.Bundle
 import android.provider.Settings
 import android.window.OnBackInvokedCallback
@@ -31,9 +30,6 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
@@ -49,7 +45,6 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -87,8 +82,6 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.state.ToggleableState
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.text.font.FontWeight
@@ -121,10 +114,12 @@ import top.yukonga.miuix.kmp.nav.transition.NavSwipeDirection
 import top.yukonga.miuix.kmp.nav.transition.NavTransitions
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.preference.CheckboxPreference
+import top.yukonga.miuix.kmp.preference.RadioButtonPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.menu.OverlayIconDropdownMenu
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
-import top.yukonga.miuix.kmp.window.WindowDialog
+import top.yukonga.miuix.kmp.window.WindowBottomSheet
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.BankCards
@@ -136,6 +131,8 @@ import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.squircle.squircleSurface
+import top.yukonga.miuix.kmp.squircle.squircleClip
+import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import com.kelsuita.starswish.data.*
 import com.kelsuita.starswish.data.fetchHitokoto
 import com.kelsuita.starswish.sync.XiaoxingAccessibilityService
@@ -184,6 +181,8 @@ private data class AppRoute(val page: Int) : NavKey
 /** One confirmed-but-not-yet-applied balance change shown in the import confirmation sheet. */
 private data class WebDavBalanceChange(val accountId: String, val name: String, val before: Long, val after: Long)
 private val NavIcons = listOf(MiuixIcons.Home, MiuixIcons.BankCards, MiuixIcons.Settings)
+/** All transient notices share one short, consistent Snackbar duration. */
+private val NoticeDuration = SnackbarDuration.Custom(durationMillis = 2000)
 // A full backup can approach the Bundle transaction limit. Persist the pending import across
 // recreation only when it is comfortably small; otherwise the user can pick the file again.
 private const val PENDING_BACKUP_SAVE_LIMIT = 256 * 1024
@@ -292,6 +291,7 @@ private fun SavingsApp(
     // expand the rail. Content stays centred instead of stretching across a large window.
     val configuration = LocalConfiguration.current
     val wideLayout = configuration.screenWidthDp >= 600
+    val landscape = configuration.screenWidthDp > configuration.screenHeightDp
     val useFloatingNav = appearance.floatingNavBar
     val expandedNavigation = configuration.screenWidthDp >= 1000
     // Use the expandable rail overload so Miuix supplies its own toggle button. The width only
@@ -360,6 +360,11 @@ private fun SavingsApp(
     var webDavAccountId by rememberSaveable { mutableStateOf<String?>(null) }
     var webDavChanges by remember { mutableStateOf<List<WebDavBalanceChange>>(emptyList()) }
     var webDavChangesVisible by remember { mutableStateOf(false) }
+    // Kept aside until the credential sheet has finished hiding: stacking two bottom sheets
+    // leaves the outgoing one visible behind the confirmation and both disappear on drag.
+    var pendingWebDavChanges by remember { mutableStateOf<List<WebDavBalanceChange>?>(null) }
+    // The goal sheet can request the account sheet; open it only after the goal sheet is gone.
+    var openAccountAfterGoal by remember { mutableStateOf(false) }
     var aboutIconTaps by rememberSaveable { mutableIntStateOf(0) }
     // Delete targets are intentionally not saved across recreation: the confirmation carries
     // no user input, so restoring it is not worth serializing a whole model object. Visibility
@@ -425,7 +430,7 @@ private fun SavingsApp(
             snackbarHostState.showSnackbar(
                 message = text,
                 withDismissAction = true,
-                duration = SnackbarDuration.Short,
+                duration = NoticeDuration,
             )
         }
     }
@@ -499,6 +504,7 @@ private fun SavingsApp(
     }
     fun beginWebDavRead(accountId: String? = null) {
         if (!store.developerModeEnabled() || !store.webDavBalanceEnabled()) return
+        pendingWebDavChanges = null
         webDavAccountId = accountId
         webDavUrl = store.webDavUrl()
         webDavAccount = store.webDavAccount()
@@ -549,10 +555,16 @@ private fun SavingsApp(
                 if (matched == 0) throw SyncError("webdav.error_empty_accounts")
                 // Balance writes and the first successful sync require explicit confirmation.
                 refresh()
+                val fromCredentialsSheet = webDavSheet
                 webDavSheet = false
                 webDavAccountId = null
-                webDavChanges = changes
-                webDavChangesVisible = true
+                if (fromCredentialsSheet) {
+                    // Wait for the credential sheet's hide animation, then reveal the confirmation.
+                    pendingWebDavChanges = changes
+                } else {
+                    webDavChanges = changes
+                    webDavChangesVisible = true
+                }
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 Log.w("StarwishWebDav", "WebDAV balance import failed", error)
@@ -798,6 +810,7 @@ private fun SavingsApp(
         val pageScrollState = key(displayedPage) { rememberScrollState() }
         var viewportTop by remember { mutableFloatStateOf(0f) }
         var viewportHeight by remember { mutableFloatStateOf(0f) }
+        val statusBarTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         Scaffold(topBar = {
             Box(Modifier.fillMaxWidth()
                 .then(if (backdrop != null) Modifier.textureBlur(backdrop, RectangleShape, BlurDefaults.BlurRadius,
@@ -883,6 +896,13 @@ private fun SavingsApp(
                             else if (displayedPage == 7) tr("common.back_to_accounts") else tr("common.back_to_settings"))
                     }
                 })
+                // In landscape the bar blur samples the page and tints the status-bar strip.
+                // Cover that strip with the plain page colour so the system icons sit on the
+                // same background as the page instead of a coloured band.
+                if (landscape && backdrop != null && statusBarTopPadding > 0.dp) {
+                    Box(Modifier.align(Alignment.TopCenter).fillMaxWidth()
+                        .height(statusBarTopPadding).background(pageBackground))
+                }
             }
         }, containerColor = pageBackground) { pagePadding ->
         Box(Modifier.fillMaxSize().onGloballyPositioned {
@@ -1034,7 +1054,7 @@ private fun SavingsApp(
                                 Button(onClick = {
                                     if (webDavActive) {
                                         if (webDavConnected) {
-                                            Toast.makeText(context, tr("webdav.reading_toast"), Toast.LENGTH_SHORT).show()
+                                            notify(tr("webdav.reading_toast"))
                                             readWebDav(account.id)
                                         } else beginWebDavRead(account.id)
                                     } else capture(account)
@@ -1224,12 +1244,8 @@ private fun SavingsApp(
                         insideMargin = DpSize(24.dp, 48.dp),
                     ) {
                         // The sheet paints itself with colorScheme.background. The stock palette sets
-                        // surfaceContainer to that same color, which made this card vanish at the
-                        // default accent; fall back to a tinted container there.
-                        val cardColor = MiuixTheme.colorScheme.surfaceContainer
-                            .takeIf { it != MiuixTheme.colorScheme.background }
-                            ?: MiuixTheme.colorScheme.secondaryContainer
-                        Card(Modifier.fillMaxWidth(), colors = CardDefaults.defaultColors(color = cardColor)) {
+                        // surfaceContainer to that same color, so use [sheetCardColors] here too.
+                        Card(Modifier.fillMaxWidth(), colors = sheetCardColors()) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically) {
@@ -1291,7 +1307,7 @@ private fun SavingsApp(
                 }
                 3 -> {
                     Panel {
-                        Box(Modifier.clickable {
+                        Box(Modifier.squircleClip(cornerRadius = 15.dp).clickable {
                             aboutIconTaps++
                             if (aboutIconTaps >= 10 && !store.developerModeEnabled()) {
                                 aboutIconTaps = 0
@@ -1349,44 +1365,6 @@ private fun SavingsApp(
                     }
                 }
             }
-            OverlayBottomSheet(
-                show = webDavSheet,
-                title = tr("webdav.title"),
-                startAction = { IconButton(onClick = { webDavSheet = false }) { Icon(MiuixIcons.Close, contentDescription = tr("common.cancel"), tint = MiuixTheme.colorScheme.onBackground) } },
-                endAction = { IconButton(onClick = { readWebDav() }, enabled = !webDavBusy) { Icon(MiuixIcons.Ok, contentDescription = tr("common.confirm"), tint = MiuixTheme.colorScheme.onBackground) } },
-                onDismissRequest = { if (!webDavBusy) webDavSheet = false },
-                insideMargin = DpSize(24.dp, 48.dp),
-            ) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    TextField(value = webDavUrl, onValueChange = { webDavUrl = it }, label = tr("webdav.url"))
-                    TextField(value = webDavAccount, onValueChange = { webDavAccount = it }, label = tr("webdav.account"))
-                    TextField(value = webDavPassword, onValueChange = { webDavPassword = it }, label = tr("webdav.password"),
-                        visualTransformation = PasswordVisualTransformation(), singleLine = true)
-                    if (webDavBusy) Text(tr("webdav.reading"), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-                }
-            }
-            OverlayBottomSheet(
-                show = webDavChangesVisible,
-                title = tr("webdav.confirm_title"),
-                startAction = { IconButton(onClick = { webDavChangesVisible = false }) { Icon(MiuixIcons.Close, contentDescription = tr("common.cancel"), tint = MiuixTheme.colorScheme.onBackground) } },
-                endAction = { IconButton(onClick = { confirmWebDavChanges() }) { Icon(MiuixIcons.Ok, contentDescription = tr("common.confirm"), tint = MiuixTheme.colorScheme.onBackground) } },
-                onDismissRequest = { webDavChangesVisible = false },
-                insideMargin = DpSize(24.dp, 48.dp),
-            ) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (webDavChanges.isEmpty()) Text(tr("webdav.no_changes"))
-                    webDavChanges.forEach { change ->
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically) {
-                            Text(change.name, style = MiuixTheme.textStyles.body1, maxLines = 1,
-                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f))
-                            Text("¥ ${Money.format(change.before)} → ¥ ${Money.format(change.after)}",
-                                style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
             Spacer(Modifier.height(8.dp))
         }
         }
@@ -1410,6 +1388,63 @@ private fun SavingsApp(
                     verticalAlignment = Alignment.Top,
                     beyondViewportPageCount = 0,
                 ) { displayedPage -> pageContent(displayedPage) }
+            }
+        }
+        OverlayBottomSheet(
+            show = webDavSheet,
+            title = tr("webdav.title"),
+            startAction = { IconButton(onClick = { webDavSheet = false }) { Icon(MiuixIcons.Close, contentDescription = tr("common.cancel"), tint = MiuixTheme.colorScheme.onBackground) } },
+            endAction = { IconButton(onClick = { readWebDav() }, enabled = !webDavBusy) { Icon(MiuixIcons.Ok, contentDescription = tr("common.confirm"), tint = MiuixTheme.colorScheme.onBackground) } },
+            onDismissRequest = { if (!webDavBusy) webDavSheet = false },
+            onDismissFinished = {
+                pendingWebDavChanges?.let { changes ->
+                    pendingWebDavChanges = null
+                    webDavChanges = changes
+                    webDavChangesVisible = true
+                }
+            },
+            insideMargin = DpSize(24.dp, 48.dp),
+        ) {
+            Column(Modifier.fillMaxWidth()) {
+                SmallTitle(text = tr("webdav.account_config"), textColor = accent,
+                    insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        TextField(value = webDavUrl, onValueChange = { webDavUrl = it }, label = tr("webdav.url"))
+                        TextField(value = webDavAccount, onValueChange = { webDavAccount = it }, label = tr("webdav.account"))
+                        TextField(value = webDavPassword, onValueChange = { webDavPassword = it }, label = tr("webdav.password"),
+                            visualTransformation = PasswordVisualTransformation(), singleLine = true)
+                    }
+                }
+                if (webDavBusy) Text(tr("webdav.reading"), color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.padding(horizontal = 16.dp))
+            }
+        }
+        OverlayBottomSheet(
+            show = webDavChangesVisible,
+            title = tr("webdav.confirm_title"),
+            startAction = { IconButton(onClick = { webDavChangesVisible = false }) { Icon(MiuixIcons.Close, contentDescription = tr("common.cancel"), tint = MiuixTheme.colorScheme.onBackground) } },
+            endAction = { IconButton(onClick = { confirmWebDavChanges() }) { Icon(MiuixIcons.Ok, contentDescription = tr("common.confirm"), tint = MiuixTheme.colorScheme.onBackground) } },
+            onDismissRequest = { webDavChangesVisible = false },
+            onDismissFinished = { webDavChanges = emptyList() },
+            insideMargin = DpSize(24.dp, 48.dp),
+        ) {
+            // The card's bottom edge sits 48dp above the screen bottom (sheet inside margin).
+            Card(Modifier.fillMaxWidth(), colors = sheetCardColors()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (webDavChanges.isEmpty()) Text(tr("webdav.no_changes"))
+                    webDavChanges.forEach { change ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text(change.name, style = MiuixTheme.textStyles.body1, maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f))
+                            Text("¥ ${Money.format(change.before)} → ¥ ${Money.format(change.after)}",
+                                style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
         }
         }
@@ -1453,9 +1488,18 @@ private fun SavingsApp(
             existing = editingGoal,
             accounts = accounts,
             onDismiss = { goalEditor = false },
-            onDismissFinished = { editingGoalId = null; finished() },
+            onDismissFinished = {
+                editingGoalId = null
+                finished()
+                if (openAccountAfterGoal) {
+                    openAccountAfterGoal = false
+                    navigate(1)
+                    editingAccountId = null
+                    accountEditor = true
+                }
+            },
             onSave = { if (mutate { store.saveGoal(it) }) goalEditor = false },
-            onAddAccount = { goalEditor = false; navigate(1); editingAccountId = null; accountEditor = true },
+            onAddAccount = { openAccountAfterGoal = true; goalEditor = false },
         )
     }
     DialogHost(accountEditor) { finished ->
@@ -1536,34 +1580,43 @@ private fun formatBannerPercent(progress: Float, decimals: Int): String {
     val subtle = foreground.copy(alpha = if (status) .7f else .82f)
     val base = if (status) MiuixTheme.colorScheme.primaryContainer else accent
     val fill = if (status) MiuixTheme.colorScheme.onPrimaryContainer else MiuixTheme.colorScheme.onPrimary
-    Box(Modifier.fillMaxWidth().squircleSurface(color = base, cornerRadius = 20.dp)
-        .clearAndSetSemantics { contentDescription = tr("home.banner_description", featured?.title ?: tr("home.no_goal"), if (completed) tr("home.completed") else percentText) }) {
-        Box(Modifier.align(Alignment.TopEnd).padding(18.dp)) {
-            if (completed) Text("🎉", fontSize = 44.sp)
-            else Symbol("star", foreground.copy(alpha = .22f), Modifier.size(44.dp))
-        }
-        Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(tr("home.current_wish"), style = MiuixTheme.textStyles.footnote1, color = subtle)
-            Text(featured?.title ?: tr("home.empty_create_goal"), style = MiuixTheme.textStyles.title2,
-                fontWeight = FontWeight.Bold, color = foreground, maxLines = 2,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-            Spacer(Modifier.height(10.dp))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(if (featured == null) tr("account.add_before_goal") else
-                    "¥ ${Money.format(featured.saved(accounts))} / ¥ ${Money.format(featured.target)}",
-                    style = MiuixTheme.textStyles.footnote1, color = subtle, modifier = Modifier.weight(1f))
-                Text(if (completed) tr("home.completed") else percentText,
-                    style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold, color = foreground)
+    Card(
+        modifier = Modifier.fillMaxWidth()
+            .clearAndSetSemantics { contentDescription = tr("home.banner_description", featured?.title ?: tr("home.no_goal"), if (completed) tr("home.completed") else percentText) },
+        cornerRadius = 20.dp,
+        insideMargin = PaddingValues(0.dp),
+        colors = CardDefaults.defaultColors(color = base),
+        pressFeedbackType = PressFeedbackType.Tilt,
+        showIndication = false,
+    ) {
+        Box(Modifier.fillMaxWidth()) {
+            Box(Modifier.align(Alignment.TopEnd).padding(18.dp)) {
+                if (completed) Text("🎉", fontSize = 44.sp)
+                else Symbol("star", foreground.copy(alpha = .22f), Modifier.size(44.dp))
             }
-            LinearProgressIndicator(progress = progress, height = 8.dp,
-                colors = ProgressIndicatorDefaults.progressIndicatorColors(
-                    foregroundColor = fill, backgroundColor = fill.copy(alpha = .20f)))
-            if (featured != null) {
-                val remainingLabel = if (featured.remaining(accounts) == 0L) tr("goal.achieved")
-                    else tr("goal.remaining_amount", Money.format(featured.remaining(accounts)))
-                Text(if (featured.deadline.isBlank()) remainingLabel
-                    else tr("format.title_dot_detail", remainingLabel, featured.deadline),
-                    color = subtle, style = MiuixTheme.textStyles.footnote2, maxLines = 1)
+            Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(tr("home.current_wish"), style = MiuixTheme.textStyles.footnote1, color = subtle)
+                Text(featured?.title ?: tr("home.empty_create_goal"), style = MiuixTheme.textStyles.title2,
+                    fontWeight = FontWeight.Bold, color = foreground, maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(if (featured == null) tr("account.add_before_goal") else
+                        "¥ ${Money.format(featured.saved(accounts))} / ¥ ${Money.format(featured.target)}",
+                        style = MiuixTheme.textStyles.footnote1, color = subtle, modifier = Modifier.weight(1f))
+                    Text(if (completed) tr("home.completed") else percentText,
+                        style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold, color = foreground)
+                }
+                LinearProgressIndicator(progress = progress, height = 8.dp,
+                    colors = ProgressIndicatorDefaults.progressIndicatorColors(
+                        foregroundColor = fill, backgroundColor = fill.copy(alpha = .20f)))
+                if (featured != null) {
+                    val remainingLabel = if (featured.remaining(accounts) == 0L) tr("goal.achieved")
+                        else tr("goal.remaining_amount", Money.format(featured.remaining(accounts)))
+                    Text(if (featured.deadline.isBlank()) remainingLabel
+                        else tr("format.title_dot_detail", remainingLabel, featured.deadline),
+                        color = subtle, style = MiuixTheme.textStyles.footnote2, maxLines = 1)
+                }
             }
         }
     }
@@ -1659,31 +1712,37 @@ private fun formatBannerPercent(progress: Float, decimals: Int): String {
         if (accounts.isEmpty()) {
             Note(tr("account.empty_before_goal"))
             Button(onClick = onAddAccount, modifier = Modifier.fillMaxWidth()) { Text(tr("account.add_first")) }
-        }
-        accounts.forEach { account ->
-            val checked = account.id in selected
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
-                .background(if (checked) MiuixTheme.colorScheme.primaryContainer else MiuixTheme.colorScheme.secondaryContainer)
-                .toggleable(value = checked, role = Role.Checkbox,
-                    onValueChange = { selected = if (it) selected + account.id else selected - account.id; accountError = "" })
-                .padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Checkbox(state = if (checked) ToggleableState.On else ToggleableState.Off, onClick = null,
-                    modifier = Modifier.clearAndSetSemantics {})
-                Column(Modifier.weight(1f)) {
-                    Text(account.name, fontSize = 14.sp)
-                    Text("¥ ${Money.format(account.balance)}", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+        } else {
+            Card(Modifier.fillMaxWidth(), colors = sheetCardColors()) {
+                accounts.forEach { account ->
+                    CheckboxPreference(
+                        title = account.name,
+                        summary = "¥ ${Money.format(account.balance)}",
+                        checked = account.id in selected,
+                        onCheckedChange = { isChecked ->
+                            selected = if (isChecked) selected + account.id else selected - account.id
+                            accountError = ""
+                        },
+                    )
                 }
             }
         }
         FieldError(accountError)
         Text(tr("goal.calculation_mode"), fontWeight = FontWeight.Bold, fontSize = 15.sp)
-        Row(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ModeOption(tr("goal.current_balance"), !growth, Modifier.weight(1f)) { growth = false }
-            ModeOption(tr("goal.start_now"), growth, Modifier.weight(1f)) { growth = true }
+        Card(Modifier.fillMaxWidth(), colors = sheetCardColors()) {
+            RadioButtonPreference(
+                title = tr("goal.current_balance"),
+                summary = tr("goal.mode_balance_summary"),
+                selected = !growth,
+                onClick = { growth = false },
+            )
+            RadioButtonPreference(
+                title = tr("goal.start_now"),
+                summary = tr("goal.mode_growth_summary"),
+                selected = growth,
+                onClick = { growth = true },
+            )
         }
-        Note(if (growth) tr("goal.mode_growth_summary") else tr("goal.mode_balance_summary"))
-        Note(tr("theme.goal_accent_note"))
         Button(onClick = {
             val target = Money.parse(amount)
             val parsedDate = if (date.isBlank()) null else runCatching { LocalDate.parse(date) }.getOrNull()
@@ -1708,17 +1767,6 @@ private fun formatBannerPercent(progress: Float, decimals: Int): String {
         }, enabled = accounts.isNotEmpty(), modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColorsPrimary()) {
             Text(if (existing == null) tr("goal.start_wish") else tr("common.save_changes"))
         }
-    }
-}
-
-@Composable private fun RowScope.ModeOption(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Row(modifier.clip(RoundedCornerShape(16.dp))
-        .background(if (selected) MiuixTheme.colorScheme.primaryContainer else MiuixTheme.colorScheme.secondaryContainer)
-        .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
-        .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        RadioButton(selected = selected, onClick = null, modifier = Modifier.clearAndSetSemantics {})
-        Text(label, fontSize = 13.sp)
     }
 }
 
@@ -1762,6 +1810,19 @@ private fun formatBannerPercent(progress: Float, decimals: Int): String {
     }
 }
 
+/** Card colors that stay visible on a bottom-sheet background in the stock palette. */
+@Composable private fun sheetCardColors(): CardColors {
+    val surface = MiuixTheme.colorScheme.surfaceContainer
+    return if (surface != MiuixTheme.colorScheme.background) {
+        CardDefaults.defaultColors()
+    } else {
+        CardDefaults.defaultColors(
+            color = MiuixTheme.colorScheme.secondaryContainer,
+            contentColor = MiuixTheme.colorScheme.onSecondaryContainer,
+        )
+    }
+}
+
 @Composable private fun dialogFieldColors(invalid: Boolean): TextFieldColors = TextFieldDefaults.textFieldColors(
     backgroundColor = if (invalid) MiuixTheme.colorScheme.errorContainer else MiuixTheme.colorScheme.secondaryContainer,
     labelColor = if (invalid) MiuixTheme.colorScheme.onErrorContainer else MiuixTheme.colorScheme.onSecondaryContainer,
@@ -1790,8 +1851,21 @@ private fun formatBannerPercent(progress: Float, decimals: Int): String {
     onDismissFinished: () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    WindowDialog(show = show, title = title, onDismissRequest = onDismiss, onDismissFinished = onDismissFinished) {
-        Column(Modifier.heightIn(max = 620.dp).verticalScroll(rememberScrollState()),
+    WindowBottomSheet(
+        show = show,
+        title = title,
+        startAction = {
+            IconButton(onClick = onDismiss) {
+                Icon(MiuixIcons.Close, contentDescription = tr("common.cancel"),
+                    tint = MiuixTheme.colorScheme.onBackground)
+            }
+        },
+        onDismissRequest = onDismiss,
+        onDismissFinished = onDismissFinished,
+        insideMargin = DpSize(24.dp, 24.dp),
+    ) {
+        Column(Modifier.fillMaxWidth().heightIn(max = 560.dp).verticalScroll(rememberScrollState())
+            .padding(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             content()
         }
