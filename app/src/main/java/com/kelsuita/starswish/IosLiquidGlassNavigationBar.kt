@@ -114,8 +114,8 @@ import kotlin.math.sin
 
 private val LocalIosTabScale = staticCompositionLocalOf { { 1f } }
 
-/** Bar blur radius in pixels; 128 gives the frosted iOS-like glass look. */
-private const val BAR_BLUR_RADIUS_PX = 128f
+/** Bar blur radius in pixels. */
+private const val BAR_BLUR_RADIUS_PX = 94f
 
 private val iosIndicatorSpecular: Highlight = Highlight(
     width = 1.dp,
