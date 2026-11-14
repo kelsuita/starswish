@@ -30,7 +30,7 @@ background sync, no transaction history is read, and nothing is confirmed on you
 
 ## Download
 
-Current release: [Starwish Intelligentsia Guild 1.6.1](https://github.com/kelsuita/starswish/releases/tag/v1.6.1)
+Current release: [Starwish Ruan Mei 1.6.7](https://github.com/kelsuita/starswish/releases/tag/v1.6.7)
 
 - `app-universal-release.apk`: universal package, choose this if you are unsure about the ABI
 - `app-armeabi-v7a-release.apk`: 32-bit ARM devices
@@ -45,23 +45,15 @@ Current release: [Starwish Intelligentsia Guild 1.6.1](https://github.com/kelsui
 Future releases will keep using the same release key, so release builds can be upgraded in place.
 Do not lose or replace that key — Android will refuse to install a new version as an update otherwise.
 
-## What's new in Intelligentsia Guild 1.6.1
+## What's new in Ruan Mei 1.6.7
 
-- WebDAV sync (testing)
-- Improved landscape status bar/camera-cutout and account card layout
-- Goal editor section headers now match settings styling
-- Better popup card and input field contrast
+- Dialogs now use the standard Miuix dialog layout with a cancel and confirm pair
+- Card actions and section titles follow the Miuix button and title styles
+- Fixed the home card action row not being laid out correctly
+- Reduced the blur radius of the iOS-style bottom bar
+- Improved how long labels wrap in cards and forms
 - Stability and smoothness improvements
-
-## Intelligentsia Guild 1.6.1 更新内容
-
-- 测试中：WebDAV同步
-- 优化横屏状态栏/摄像头区域与账户卡片布局
-- 心愿编辑小标题与设置页样式统一
-- 优化弹窗卡片与输入框对比度
-- 提高应用的稳定性和流畅度
-
-## Quick start
+\n## Quick start
 
 1. Download and install the release APK that matches your device ABI; choose `app-universal-release.apk` if unsure.
 2. Add an account on the "Accounts" tab and enter its balance; you can maintain balances entirely by hand without Xiaoxing Ledger.

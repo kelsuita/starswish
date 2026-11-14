@@ -18,7 +18,7 @@ Starwish はお金には触れません。「いくら貯めたいか、あと�
 
 ## ダウンロード
 
-現在のリリース：[Starwish Intelligentsia Guild 1.6.1](https://github.com/kelsuita/starswish/releases/tag/v1.6.1)
+現在のリリース：[Starwish Ruan Mei 1.6.7](https://github.com/kelsuita/starswish/releases/tag/v1.6.7)
 
 - `app-universal-release.apk`：汎用パッケージ。端末のアーキテクチャが不明な場合はこれを選択
 - `app-armeabi-v7a-release.apk`：32 ビット ARM 端末

@@ -18,7 +18,7 @@
 
 ## 下载
 
-当前发布版本：[星愿 Intelligentsia Guild 1.6.1](https://github.com/kelsuita/starswish/releases/tag/v1.6.1)
+当前发布版本：[星愿 Ruan Mei 1.6.7](https://github.com/kelsuita/starswish/releases/tag/v1.6.7)
 
 - `app-universal-release.apk`：通用架构包，不确定设备架构时选择此包
 - `app-armeabi-v7a-release.apk`：32 位 ARM 设备
@@ -32,15 +32,15 @@
 
 后续 release 更新将继续使用同一正式密钥签名，可直接升级正式签名的版本。请勿丢失或更换该密钥，否则 Android 将无法把新版本作为旧版本的更新安装。
 
-## Intelligentsia Guild 1.6.1 更新内容
+## Ruan Mei 1.6.7 更新内容
 
-- 测试中：WebDAV同步
-- 优化横屏状态栏/摄像头区域与账户卡片布局
-- 心愿编辑小标题与设置页样式统一
-- 优化弹窗卡片与输入框对比度
-- 提高应用的稳定性和流畅度
-
-## 快速开始
+- 弹窗统一为 Miuix 标准对话框样式，按钮改为「取消 / 确认」组合
+- 卡片操作按钮与分节标题改用 Miuix 文本按钮和标题样式
+- 修复首页卡片操作按钮显示错位的问题
+- 降低 iOS 风格底栏的模糊半径
+- 优化卡片与表单中长文案的排版
+- 提高应用的稳定性，优化应用的流畅度
+\n## 快速开始
 
 1. 下载并安装与你设备架构匹配的 Release APK，不确定时选择 `app-universal-release.apk`。
 2. 在「账户」添加账户并填写余额；不使用小星记账时，也可以完全手动维护。

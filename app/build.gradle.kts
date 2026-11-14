@@ -120,8 +120,8 @@ android {
         applicationId = "com.kelsuita.starswish"
         minSdk = 26
         targetSdk = 37
-        versionCode = 21
-        versionName = "Intelligentsia Guild 1.6.1"
+        versionCode = 22
+        versionName = "Ruan Mei 1.6.7"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     splits {
