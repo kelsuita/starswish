@@ -1713,13 +1713,11 @@ private fun formatBannerPercent(progress: Float, decimals: Int): String {
         val linked = accounts.filter { it.id in goal.accountIds }
         if (!compact) Text(linked.joinToString(" · ") { it.name }, style = MiuixTheme.textStyles.footnote2, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         if (!compact && goal.mode == GoalMode.GROWTH) Note(tr("goal.starting_balance", Money.format(goal.baseline)))
+        TextButton(text = tr("account.update_balance"), onClick = onSync, modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.textButtonColorsPrimary())
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TextButton(text = tr("account.update_balance"), onClick = onSync, modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.textButtonColorsPrimary())
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TextButton(text = tr("common.edit"), onClick = onEdit, modifier = Modifier.weight(1f))
-                TextButton(text = tr("common.delete"), onClick = onDelete, modifier = Modifier.weight(1f))
-            }
+            TextButton(text = tr("common.edit"), onClick = onEdit, modifier = Modifier.weight(1f))
+            TextButton(text = tr("common.delete"), onClick = onDelete, modifier = Modifier.weight(1f))
         }
     }
 }
