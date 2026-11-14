@@ -1072,15 +1072,17 @@ private fun SavingsApp(
                             Text("¥ ${Money.format(account.balance)}", style = MiuixTheme.textStyles.title2, fontWeight = FontWeight.Bold)
                             Text(tr("account.updated_at", timeLabel(account.updatedAt)), style = MiuixTheme.textStyles.footnote1,
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                            // The read action names the source page, so it is longer than the other two
+                            // in every language: give it a full row and share the second row.
+                            TextButton(text = tr("accessibility.read_balance"), onClick = {
+                                if (webDavActive) {
+                                    if (webDavConnected) {
+                                        notify(tr("webdav.reading_toast"))
+                                        readWebDav(account.id)
+                                    } else beginWebDavRead(account.id)
+                                } else capture(account)
+                            }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.textButtonColorsPrimary())
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                TextButton(text = tr("accessibility.read_balance"), onClick = {
-                                    if (webDavActive) {
-                                        if (webDavConnected) {
-                                            notify(tr("webdav.reading_toast"))
-                                            readWebDav(account.id)
-                                        } else beginWebDavRead(account.id)
-                                    } else capture(account)
-                                }, modifier = Modifier.weight(1f), colors = ButtonDefaults.textButtonColorsPrimary())
                                 TextButton(text = tr("common.edit"), onClick = { editingAccountId = account.id; accountEditor = true },
                                     modifier = Modifier.weight(1f))
                                 TextButton(text = tr("common.delete"), onClick = { deletingAccount = account; deletingAccountVisible = true },
@@ -1712,10 +1714,12 @@ private fun formatBannerPercent(progress: Float, decimals: Int): String {
         if (!compact) Text(linked.joinToString(" · ") { it.name }, style = MiuixTheme.textStyles.footnote2, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         if (!compact && goal.mode == GoalMode.GROWTH) Note(tr("goal.starting_balance", Money.format(goal.baseline)))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TextButton(text = tr("account.update_balance"), onClick = onSync, modifier = Modifier.weight(1f),
+            TextButton(text = tr("account.update_balance"), onClick = onSync, modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.textButtonColorsPrimary())
-            TextButton(text = tr("common.edit"), onClick = onEdit, modifier = Modifier.weight(1f))
-            TextButton(text = tr("common.delete"), onClick = onDelete, modifier = Modifier.weight(1f))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(text = tr("common.edit"), onClick = onEdit, modifier = Modifier.weight(1f))
+                TextButton(text = tr("common.delete"), onClick = onDelete, modifier = Modifier.weight(1f))
+            }
         }
     }
 }
