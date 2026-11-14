@@ -116,7 +116,7 @@ Assert-Text '首页'
 Assert-Text '应用'
 Screenshot '06-settings'
 Tap-Text '关于'
-Assert-Text '星愿攒钱'
+Assert-Text '星愿'
 Assert-Text '使用步骤'
 Screenshot '05-about'
 Adb @('shell', 'input', 'keyevent', '4') | Out-Null
