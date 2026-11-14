@@ -912,6 +912,16 @@ private fun SavingsApp(
             viewportHeight = it.size.height.toFloat()
         }
             .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)) {
+        // The wide layout pins content to an 880dp column, so it cannot use the page scaffold's
+        // insets, yet a landscape camera cutout still occupies one edge. Take the largest of the
+        // base margin, the scaffold inset and the cutout: the cutout is then applied exactly once
+        // and the content never slides under the camera.
+        val baseSide = if (wideLayout) 32.dp else 16.dp
+        val cutoutPadding = WindowInsets.displayCutout.asPaddingValues()
+        val sideStart = maxOf(baseSide, pagePadding.calculateStartPadding(layoutDirection),
+            cutoutPadding.calculateStartPadding(layoutDirection))
+        val sideEnd = maxOf(baseSide, pagePadding.calculateEndPadding(layoutDirection),
+            cutoutPadding.calculateEndPadding(layoutDirection))
         Column(Modifier.fillMaxHeight()
             .then(if (wideLayout) Modifier.widthIn(max = 880.dp) else Modifier)
             .fillMaxWidth()
@@ -920,8 +930,7 @@ private fun SavingsApp(
             .overScrollVertical()
             .nestedScroll(contentScrollBehavior.nestedScrollConnection)
             .verticalScroll(pageScrollState)
-            .padding(start = if (wideLayout) 32.dp else maxOf(16.dp, pagePadding.calculateStartPadding(layoutDirection)),
-                end = maxOf(if (wideLayout) 32.dp else 16.dp, pagePadding.calculateEndPadding(layoutDirection)),
+            .padding(start = sideStart, end = sideEnd,
                 top = pagePadding.calculateTopPadding(),
                 bottom = maxOf(padding.calculateBottomPadding(), pagePadding.calculateBottomPadding())),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
