@@ -243,6 +243,8 @@
   "theme.mode": "主題模式",
   "theme.monet": "莫內取色",
   "theme.monet_summary": "用於推導 MIUIX 調色盤的色調演算法",
+  "theme.nav_style_ios": "iOS 風格",
+  "theme.nav_style_miuix": "Miuix 風格",
   "theme.needs_android13": "需要 Android 13 或更新版本",
   "theme.palette_default": "預設",
   "theme.palette_style": "調色盤風格",

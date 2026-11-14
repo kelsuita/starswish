@@ -119,7 +119,7 @@ import top.yukonga.miuix.kmp.preference.RadioButtonPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.menu.OverlayIconDropdownMenu
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
-import top.yukonga.miuix.kmp.window.WindowBottomSheet
+import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.BankCards
@@ -160,6 +160,10 @@ import top.yukonga.miuix.kmp.theme.ThemePaletteStyle
 
 private val Blue = Color(0xFF3975F6)
 private val AccentColors = listOf(Blue, Color(0xFF2EAA8C), Color(0xFFB6573B), Color(0xFF8068C8))
+
+// Cards sit 16dp inside the page edge, so a 16dp title inset keeps section headings one grid step
+// to their right, like the Miuix settings examples. Shared so every page uses the same gutter.
+private val SectionTitlePadding = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp)
 // Miuix only applies the palette style and colour spec when Monet is given a key colour; without
 // one it returns the platform palette as-is. Read the wallpaper seed the platform palette is built
 // from so those two settings work for Monet too. Null means the device has no wallpaper palette
@@ -860,7 +864,8 @@ private fun SavingsApp(
                                                     scope.launch { loadQuote() }
                                                 } else Modifier)
                                                 .padding(start = side, end = side, bottom = 8.dp),
-                                            fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                                            style = MiuixTheme.textStyles.body2,
+                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                                     }
                                 }
                             }
@@ -942,7 +947,7 @@ private fun SavingsApp(
                     Overview(goals, accounts, appearance, accent)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically) {
-                        SmallTitle(tr("home.goal_list"), insideMargin = PaddingValues(start = 12.dp, top = 4.dp, bottom = 4.dp))
+                        SmallTitle(tr("home.goal_list"), insideMargin = SectionTitlePadding)
                         OverlayIconDropdownMenu(entry = DropdownEntry(listOf(
                             DropdownItem(tr("goal.new_goal"), onClick = { editingGoalId = null; goalEditor = true }),
                             DropdownItem(tr("sort.title"), onClick = { navigate(6) }),
@@ -977,14 +982,16 @@ private fun SavingsApp(
                     if (candidate != null) {
                         val account = accounts.firstOrNull { it.id == candidate.accountId }
                         Panel {
-                            Badge(tr("accessibility.waiting_confirm"), accent)
+                            StatusPill(tr("accessibility.waiting_confirm"))
                             Text(account?.name ?: tr("account.error_already_deleted"), style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold)
                             Text("¥ ${Money.format(candidate.balance)}", style = MiuixTheme.textStyles.title2, fontWeight = FontWeight.Bold)
                             Note(tr("accessibility.recognized_at", timeLabel(candidate.capturedAt)))
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Button(onClick = { mutate { store.clearCandidate() } }, modifier = Modifier.weight(1f)) { Text(tr("common.ignore")) }
-                                Button(onClick = { mutate { store.acceptCandidate() } }, enabled = account != null,
-                                    modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColorsPrimary()) { Text(tr("accessibility.confirm_sync")) }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                TextButton(text = tr("common.ignore"), onClick = { mutate { store.clearCandidate() } },
+                                    modifier = Modifier.weight(1f))
+                                TextButton(text = tr("accessibility.confirm_sync"), onClick = { mutate { store.acceptCandidate() } },
+                                    enabled = account != null, modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.textButtonColorsPrimary())
                             }
                         }
                     }
@@ -992,12 +999,13 @@ private fun SavingsApp(
                         Panel {
                             Text(tr("accessibility.waiting_page"), style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold)
                             Note(tr("accessibility.read_steps_detail"))
-                            Button(onClick = { mutate { store.cancelCapture() } }) { Text(tr("accessibility.cancel_read")) }
+                            TextButton(text = tr("accessibility.cancel_read"),
+                                onClick = { mutate { store.cancelCapture() } })
                         }
                     }
                     Panel {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            IconTile("link", accent)
+                            IconTile("link")
                             Column(Modifier.weight(1f)) {
                                 Text(tr("app.xiaoxing"), style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold)
                                 Text(when {
@@ -1007,12 +1015,12 @@ private fun SavingsApp(
                                 }, style = MiuixTheme.textStyles.footnote1,
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                             }
-                            Badge(when {
+                            StatusPill(when {
                                 webDavActive -> if (webDavConnected) tr("account.webdav_connected")
                                     else tr("account.webdav_not_connected")
                                 enabled -> tr("accessibility.granted")
                                 else -> tr("accessibility.not_granted")
-                            }, accent)
+                            })
                         }
                         if (!webDavActive) {
                             Note(tr("accessibility.no_public_api_note"))
@@ -1042,7 +1050,7 @@ private fun SavingsApp(
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically) {
-                        SmallTitle(tr("account.my_accounts"), insideMargin = PaddingValues(start = 12.dp, top = 4.dp, bottom = 4.dp))
+                        SmallTitle(tr("account.my_accounts"), insideMargin = SectionTitlePadding)
                         OverlayIconDropdownMenu(entry = DropdownEntry(listOf(
                             DropdownItem(tr("account.add"), onClick = { editingAccountId = null; accountEditor = true }),
                             DropdownItem(tr("sort.title"), onClick = { navigate(7) }),
@@ -1054,7 +1062,7 @@ private fun SavingsApp(
                     val accountCard: @Composable (BankAccount) -> Unit = { account ->
                         Panel {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                IconTile("bank", accent)
+                                IconTile("bank")
                                 Column(Modifier.weight(1f)) {
                                     Text(account.name, style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold, maxLines = 1,
                                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
@@ -1064,19 +1072,19 @@ private fun SavingsApp(
                             Text("¥ ${Money.format(account.balance)}", style = MiuixTheme.textStyles.title2, fontWeight = FontWeight.Bold)
                             Text(tr("account.updated_at", timeLabel(account.updatedAt)), style = MiuixTheme.textStyles.footnote1,
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(onClick = {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                TextButton(text = tr("accessibility.read_balance"), onClick = {
                                     if (webDavActive) {
                                         if (webDavConnected) {
                                             notify(tr("webdav.reading_toast"))
                                             readWebDav(account.id)
                                         } else beginWebDavRead(account.id)
                                     } else capture(account)
-                                }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColorsPrimary()) {
-                                    Text(tr("accessibility.read_balance"))
-                                }
-                                Button(onClick = { editingAccountId = account.id; accountEditor = true }) { Text(tr("common.edit")) }
-                                Button(onClick = { deletingAccount = account; deletingAccountVisible = true }) { Text(tr("common.delete")) }
+                                }, modifier = Modifier.weight(1f), colors = ButtonDefaults.textButtonColorsPrimary())
+                                TextButton(text = tr("common.edit"), onClick = { editingAccountId = account.id; accountEditor = true },
+                                    modifier = Modifier.weight(1f))
+                                TextButton(text = tr("common.delete"), onClick = { deletingAccount = account; deletingAccountVisible = true },
+                                    modifier = Modifier.weight(1f))
                             }
                         }
                     }
@@ -1124,8 +1132,7 @@ private fun SavingsApp(
                     } }
                 }
                 2 -> {
-                    SmallTitle(text = tr("settings.language"), textColor = accent,
-                        insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
+                    SmallTitle(text = tr("settings.language"), insideMargin = SectionTitlePadding)
                     Card(Modifier.fillMaxWidth()) {
                         OverlayDropdownPreference(title = tr("settings.language"),
                             summary = if (Languages.choice == AppLanguage.FollowSystem)
@@ -1140,8 +1147,7 @@ private fun SavingsApp(
                                 Languages.set(AppLanguage.entries[value])
                             } })
                     }
-                    SmallTitle(text = tr("settings.appearance"), textColor = accent,
-                        insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
+                    SmallTitle(text = tr("settings.appearance"), insideMargin = SectionTitlePadding)
                     Card(Modifier.fillMaxWidth()) {
                         ArrowPreference(title = tr("theme.title"), summary = tr("settings.theme_summary"), onClick = { navigate(4) })
                         if (Languages.current.isChinese) {
@@ -1153,13 +1159,11 @@ private fun SavingsApp(
                                 } })
                         }
                     }
-                    SmallTitle(text = tr("settings.backup"), textColor = accent,
-                        insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
+                    SmallTitle(text = tr("settings.backup"), insideMargin = SectionTitlePadding)
                     Card(Modifier.fillMaxWidth()) {
                         ArrowPreference(title = tr("settings.import_export"), summary = tr("settings.import_export_summary"), onClick = { navigate(5) })
                     }
-                    SmallTitle(text = tr("settings.app"), textColor = accent,
-                        insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
+                    SmallTitle(text = tr("settings.app"), insideMargin = SectionTitlePadding)
                     Card(Modifier.fillMaxWidth()) {
                         ArrowPreference(title = tr("about.title"), summary = tr("about.help_and_privacy"), onClick = { navigate(3) })
                         if (developerMode) {
@@ -1169,8 +1173,7 @@ private fun SavingsApp(
                     }
                 }
                 4 -> {
-                    SmallTitle(text = tr("settings.theme"), textColor = accent,
-                        insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
+                    SmallTitle(text = tr("settings.theme"), insideMargin = SectionTitlePadding)
                     Card(Modifier.fillMaxWidth()) {
                         OverlayDropdownPreference(title = tr("theme.mode"), summary = tr("theme.choose_mode"),
                             items = listOf(tr("settings.follow_system"), tr("theme.light"), tr("theme.dark")), selectedIndex = appearance.themeMode,
@@ -1208,13 +1211,13 @@ private fun SavingsApp(
                         AnimatedVisibility(visible = appearance.floatingNavBar) {
                             Column {
                                 OverlayDropdownPreference(title = tr("settings.floating_bar_style"),
-                                    items = listOf("miuix", "iOS-like"), selectedIndex = appearance.floatingNavBarStyle,
+                                    items = listOf(tr("theme.nav_style_miuix"), tr("theme.nav_style_ios")),
+                                    selectedIndex = appearance.floatingNavBarStyle,
                                     onSelectedIndexChange = { value -> mutate { store.saveAppearance(store.appearance().copy(floatingNavBarStyle = value)) } })
                             }
                         }
                     }
-                    SmallTitle(text = tr("nav.home"), textColor = accent,
-                        insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
+                    SmallTitle(text = tr("nav.home"), insideMargin = SectionTitlePadding)
                     Card(Modifier.fillMaxWidth()) {
                         OverlayDropdownPreference(title = tr("home.banner"), items = listOf(tr("theme.light"), tr("theme.dark")),
                             selectedIndex = appearance.bannerStyle,
@@ -1313,8 +1316,8 @@ private fun SavingsApp(
                             enabled = !backupBusy, onClick = { importLauncher.launch(arrayOf("application/json", "text/*", "application/octet-stream")) })
                     }
                     if (backupBusy) Note(tr("backup.processing"))
+                    SmallTitle(tr("common.notice"), insideMargin = SectionTitlePadding)
                     Panel {
-                        Text(tr("common.notice"), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Note(tr("backup.plain_json_note"))
                         Note(tr("backup.excludes_note"))
                     }
@@ -1327,9 +1330,10 @@ private fun SavingsApp(
                                 aboutIconTaps = 0
                                 if (mutate { store.setDeveloperMode(true) }) notify(tr("webdav.developer_enabled"))
                             }
-                        }) { IconTile("star", accent) }
-                        Text(tr("app.name_full"), fontWeight = FontWeight.Bold, fontSize = 24.sp)
-                        Text("$versionName  /  ${tr("about.made_by_kelsuita")}", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                        }) { IconTile("star") }
+                        Text(tr("app.name_full"), style = MiuixTheme.textStyles.title2, fontWeight = FontWeight.Bold)
+                        Text("$versionName  /  ${tr("about.made_by_kelsuita")}",
+                            style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                     }
                     Card(Modifier.fillMaxWidth()) {
                         ArrowPreference(title = tr("about.github_link"), summary = tr("about.project_note"), onClick = {
@@ -1339,20 +1343,21 @@ private fun SavingsApp(
                             context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://afdian.com/a/kelsuita")))
                         })
                     }
+                    SmallTitle(tr("accessibility.steps"), insideMargin = SectionTitlePadding)
                     Panel {
-                        Text(tr("accessibility.steps"), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         HelpStep("01", tr("account.add"), tr("account.name_must_match"))
                         HelpStep("02", tr("goal.create_wish"), tr("goal.form_intro"))
                         HelpStep("03", tr("accessibility.read_and_confirm"), tr("accessibility.read_help"))
                     }
+                    SmallTitle(tr("about.data_stays_local"), insideMargin = SectionTitlePadding)
                     Panel {
-                        Text(tr("about.data_stays_local"), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Note(tr("about.privacy_note"))
                         Note(tr("accessibility.read_privacy_note"))
-                        Button(onClick = { disclosure = true }, modifier = Modifier.fillMaxWidth()) { Text(tr("accessibility.manage_permission")) }
+                        TextButton(text = tr("accessibility.manage_permission"), onClick = { disclosure = true },
+                            modifier = Modifier.fillMaxWidth())
                     }
+                    SmallTitle(tr("goal.how_progress_works"), insideMargin = SectionTitlePadding)
                     Panel {
-                        Text(tr("goal.how_progress_works"), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Note(tr("goal.calc_help_balance"))
                         Note(tr("goal.edit_help"))
                     }
@@ -1368,8 +1373,7 @@ private fun SavingsApp(
                             onCheckedChange = { value -> mutate { store.setDeveloperMode(value) } })
                     }
                     if (developerMode) {
-                        SmallTitle(text = tr("settings.developer_accounts"), textColor = accent,
-                            insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
+                        SmallTitle(text = tr("settings.developer_accounts"), insideMargin = SectionTitlePadding)
                         Card(Modifier.fillMaxWidth()) {
                             SwitchPreference(title = tr("settings.webdav_balance"),
                                 summary = tr("settings.webdav_balance_summary"),
@@ -1420,8 +1424,7 @@ private fun SavingsApp(
             insideMargin = DpSize(24.dp, 48.dp),
         ) {
             Column(Modifier.fillMaxWidth()) {
-                SmallTitle(text = tr("webdav.account_config"), textColor = accent,
-                    insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
+                SmallTitle(text = tr("webdav.account_config"), insideMargin = SectionTitlePadding)
                 Card(
                     Modifier.fillMaxWidth(),
                     colors = CardDefaults.defaultColors(
@@ -1432,8 +1435,10 @@ private fun SavingsApp(
                     Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         TextField(value = webDavUrl, onValueChange = { webDavUrl = it }, label = tr("webdav.url"),
+                            singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                             colors = sheetFieldColors())
                         TextField(value = webDavAccount, onValueChange = { webDavAccount = it }, label = tr("webdav.account"),
+                            singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                             colors = sheetFieldColors())
                         TextField(value = webDavPassword, onValueChange = { webDavPassword = it; webDavPasswordEdited = true }, label = tr("webdav.password"),
                             visualTransformation = PasswordVisualTransformation(), singleLine = true,
@@ -1484,24 +1489,28 @@ private fun SavingsApp(
                 onDismissFinished = { pendingBackupJson = null; finished() },
             ) {
                 Note(tr("backup.confirm_summary", backup.accounts.size, backup.goals.size))
-                Button(onClick = {
-                    scope.launch {
-                        backupBusy = true
-                        try {
-                            withContext(Dispatchers.IO) { store.importBackup(backup) }
-                            hitokoto = backup.hitokoto
-                            quoteChoice = backup.quoteEnabled
-                            Languages.set(AppLanguage.entries[backup.language])
-                            importVisible = false
-                            refresh()
-                            notify(tr("backup.imported"))
-                        } catch (error: Exception) {
-                            if (error is CancellationException) throw error
-                            notify(tr("backup.import_failed", error.message ?: tr("common.save_failed")))
-                        } finally { backupBusy = false }
-                    }
-                }, enabled = !backupBusy, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColorsPrimary()) { Text(tr("backup.confirm_import")) }
-                Button(onClick = { importVisible = false }, enabled = !backupBusy, modifier = Modifier.fillMaxWidth()) { Text(tr("common.cancel")) }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    TextButton(text = tr("common.cancel"), onClick = { importVisible = false },
+                        enabled = !backupBusy, modifier = Modifier.weight(1f))
+                    TextButton(text = tr("backup.confirm_import"), onClick = {
+                        scope.launch {
+                            backupBusy = true
+                            try {
+                                withContext(Dispatchers.IO) { store.importBackup(backup) }
+                                hitokoto = backup.hitokoto
+                                quoteChoice = backup.quoteEnabled
+                                Languages.set(AppLanguage.entries[backup.language])
+                                importVisible = false
+                                refresh()
+                                notify(tr("backup.imported"))
+                            } catch (error: Exception) {
+                                if (error is CancellationException) throw error
+                                notify(tr("backup.import_failed", error.message ?: tr("common.save_failed")))
+                            } finally { backupBusy = false }
+                        }
+                    }, enabled = !backupBusy, modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColorsPrimary())
+                }
             }
         }
     }
@@ -1544,9 +1553,13 @@ private fun SavingsApp(
             Note(tr("accessibility.enable_in_settings_note"))
             Note(tr("accessibility.permission_summary"))
             Note(tr("accessibility.privacy_detail"))
-            Button(onClick = { disclosure = false; openReaderSettings() }, modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColorsPrimary()) { Text(tr("accessibility.learn_and_open_settings")) }
-            Button(onClick = { disclosure = false }, modifier = Modifier.fillMaxWidth()) { Text(tr("common.not_now")) }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(text = tr("common.not_now"), onClick = { disclosure = false }, modifier = Modifier.weight(1f))
+                TextButton(text = tr("accessibility.learn_and_open_settings"), onClick = {
+                    disclosure = false
+                    openReaderSettings()
+                }, modifier = Modifier.weight(1f), colors = ButtonDefaults.textButtonColorsPrimary())
+            }
         }
     }
     DialogHost(deletingGoalVisible) { finished ->
@@ -1558,11 +1571,15 @@ private fun SavingsApp(
                 onDismissFinished = { deletingGoal = null; finished() },
             ) {
                 Note(tr("goal.delete_message", goal.title))
-                Button(onClick = { if (mutate { store.deleteGoal(goal.id) }) deletingGoalVisible = false },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.error,
-                        contentColor = MiuixTheme.colorScheme.onError)) { Text(tr("common.delete")) }
-                Button(onClick = { deletingGoalVisible = false }, modifier = Modifier.fillMaxWidth()) { Text(tr("common.cancel")) }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    TextButton(text = tr("common.cancel"), onClick = { deletingGoalVisible = false },
+                        modifier = Modifier.weight(1f))
+                    TextButton(text = tr("common.delete"), onClick = {
+                        if (mutate { store.deleteGoal(goal.id) }) deletingGoalVisible = false
+                    }, modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColors(color = MiuixTheme.colorScheme.error,
+                            textColor = MiuixTheme.colorScheme.onError))
+                }
             }
         }
     }
@@ -1575,11 +1592,15 @@ private fun SavingsApp(
                 onDismissFinished = { deletingAccount = null; finished() },
             ) {
                 Note(tr("account.delete_linked_message", account.name))
-                Button(onClick = { if (mutate { store.deleteAccount(account.id) }) deletingAccountVisible = false },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.error,
-                        contentColor = MiuixTheme.colorScheme.onError)) { Text(tr("common.delete")) }
-                Button(onClick = { deletingAccountVisible = false }, modifier = Modifier.fillMaxWidth()) { Text(tr("common.cancel")) }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    TextButton(text = tr("common.cancel"), onClick = { deletingAccountVisible = false },
+                        modifier = Modifier.weight(1f))
+                    TextButton(text = tr("common.delete"), onClick = {
+                        if (mutate { store.deleteAccount(account.id) }) deletingAccountVisible = false
+                    }, modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColors(color = MiuixTheme.colorScheme.error,
+                            textColor = MiuixTheme.colorScheme.onError))
+                }
             }
         }
     }
@@ -1649,16 +1670,17 @@ private fun formatBannerPercent(progress: Float, decimals: Int): String {
     val color = MiuixTheme.colorScheme.primary
     val progress by animateFloatAsState(goal.progress(accounts), tween(650), label = "goal-progress")
     val saved = goal.saved(accounts)
+    val percentLabel = formatBannerPercent(goal.progress(accounts), decimals)
     Panel {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            IconTile("star", color)
+            IconTile("star")
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(goal.title, style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold, maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 Text(if (goal.mode == GoalMode.BALANCE) tr("goal.mode_balance") else tr("goal.count_from_creation"),
                     style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
             }
-            Badge(if (saved >= goal.target) tr("goal.completed") else tr("goal.in_progress"), color)
+            StatusPill(if (saved >= goal.target) tr("goal.completed") else tr("goal.in_progress"))
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -1666,10 +1688,12 @@ private fun formatBannerPercent(progress: Float, decimals: Int): String {
                 Text(tr("goal.target_amount_line", Money.format(goal.target)), style = MiuixTheme.textStyles.footnote1,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
             }
-            Text(formatBannerPercent(goal.progress(accounts), decimals), style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold, color = color)
+            Text(percentLabel, style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold, color = color)
         }
+        // The bar reports its range itself, so the description only has to name the goal and the
+        // exact percentage, including the decimals the user picked.
         LinearProgressIndicator(progress = progress, height = 8.dp,
-            modifier = Modifier.semantics { contentDescription = tr("home.progress_percent", goal.title) },
+            modifier = Modifier.semantics { contentDescription = tr("home.progress_percent", percentLabel) },
             colors = ProgressIndicatorDefaults.progressIndicatorColors(foregroundColor = color, backgroundColor = MiuixTheme.colorScheme.secondaryContainer))
         if (!compact) Text(if (saved >= goal.target) tr("home.goal_completed_celebration") else tr("home.remaining_amount_encourage", Money.format(goal.remaining(accounts))),
             style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
@@ -1687,10 +1711,11 @@ private fun formatBannerPercent(progress: Float, decimals: Int): String {
         val linked = accounts.filter { it.id in goal.accountIds }
         if (!compact) Text(linked.joinToString(" · ") { it.name }, style = MiuixTheme.textStyles.footnote2, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         if (!compact && goal.mode == GoalMode.GROWTH) Note(tr("goal.starting_balance", Money.format(goal.baseline)))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onSync, modifier = Modifier.weight(1f)) { Text(tr("account.update_balance")) }
-            Button(onClick = onEdit) { Text(tr("common.edit")) }
-            Button(onClick = onDelete) { Text(tr("common.delete")) }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            TextButton(text = tr("account.update_balance"), onClick = onSync, modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.textButtonColorsPrimary())
+            TextButton(text = tr("common.edit"), onClick = onEdit, modifier = Modifier.weight(1f))
+            TextButton(text = tr("common.delete"), onClick = onDelete, modifier = Modifier.weight(1f))
         }
     }
 }
@@ -1731,8 +1756,7 @@ private fun formatBannerPercent(progress: Float, decimals: Int): String {
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
             colors = dialogFieldColors(dateError.isNotEmpty()))
         FieldError(dateError)
-        SmallTitle(text = tr("goal.linked_accounts"), textColor = MiuixTheme.colorScheme.primary,
-            insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
+        SmallTitle(text = tr("goal.linked_accounts"), insideMargin = SectionTitlePadding)
         if (accounts.isEmpty()) {
             Note(tr("account.empty_before_goal"))
             Button(onClick = onAddAccount, modifier = Modifier.fillMaxWidth()) { Text(tr("account.add_first")) }
@@ -1752,8 +1776,7 @@ private fun formatBannerPercent(progress: Float, decimals: Int): String {
             }
         }
         FieldError(accountError)
-        SmallTitle(text = tr("goal.calculation_mode"), textColor = MiuixTheme.colorScheme.primary,
-            insideMargin = PaddingValues(start = 16.dp, top = 8.dp, bottom = 8.dp))
+        SmallTitle(text = tr("goal.calculation_mode"), insideMargin = SectionTitlePadding)
         Card(Modifier.fillMaxWidth(), colors = sheetCardColors()) {
             RadioButtonPreference(
                 title = tr("goal.current_balance"),
@@ -1768,29 +1791,31 @@ private fun formatBannerPercent(progress: Float, decimals: Int): String {
                 onClick = { growth = true },
             )
         }
-        Button(onClick = {
-            val target = Money.parse(amount)
-            val parsedDate = if (date.isBlank()) null else runCatching { LocalDate.parse(date) }.getOrNull()
-            titleError = if (title.isBlank()) tr("goal.name_empty_error") else ""
-            amountError = if (target == null || target <= 0) tr("goal.error_invalid_amount") else ""
-            accountError = if (selected.isEmpty()) tr("goal.error_account_required") else ""
-            dateError = when {
-                date.isNotBlank() && (parsedDate == null || parsedDate.toString() != date) ->
-                    tr("goal.error_date_format")
-                parsedDate != null && parsedDate < LocalDate.now() && date != existing?.deadline ->
-                    tr("goal.error_past_date")
-                else -> ""
-            }
-            if (titleError.isEmpty() && amountError.isEmpty() && accountError.isEmpty() &&
-                dateError.isEmpty() && target != null) {
-                val mode = if (growth) GoalMode.GROWTH else GoalMode.BALANCE
-                val unchanged = existing != null && existing.accountIds == selected.toSet() && existing.mode == mode
-                val baseline = if (unchanged) existing.baseline else accounts.filter { it.id in selected }.sumOf { it.balance }
-                onSave(SavingGoal(existing?.id ?: UUID.randomUUID().toString(), title.trim(), target,
-                    selected.toSet(), mode, if (growth) baseline else 0, date, existing?.colorIndex ?: 0))
-            }
-        }, enabled = accounts.isNotEmpty(), modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColorsPrimary()) {
-            Text(if (existing == null) tr("goal.start_wish") else tr("common.save_changes"))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            TextButton(text = tr("common.cancel"), onClick = onDismiss, modifier = Modifier.weight(1f))
+            TextButton(text = if (existing == null) tr("goal.start_wish") else tr("common.save_changes"), onClick = {
+                val target = Money.parse(amount)
+                val parsedDate = if (date.isBlank()) null else runCatching { LocalDate.parse(date) }.getOrNull()
+                titleError = if (title.isBlank()) tr("goal.name_empty_error") else ""
+                amountError = if (target == null || target <= 0) tr("goal.error_invalid_amount") else ""
+                accountError = if (selected.isEmpty()) tr("goal.error_account_required") else ""
+                dateError = when {
+                    date.isNotBlank() && (parsedDate == null || parsedDate.toString() != date) ->
+                        tr("goal.error_date_format")
+                    parsedDate != null && parsedDate < LocalDate.now() && date != existing?.deadline ->
+                        tr("goal.error_past_date")
+                    else -> ""
+                }
+                if (titleError.isEmpty() && amountError.isEmpty() && accountError.isEmpty() &&
+                    dateError.isEmpty() && target != null) {
+                    val mode = if (growth) GoalMode.GROWTH else GoalMode.BALANCE
+                    val unchanged = existing != null && existing.accountIds == selected.toSet() && existing.mode == mode
+                    val baseline = if (unchanged) existing.baseline else accounts.filter { it.id in selected }.sumOf { it.balance }
+                    onSave(SavingGoal(existing?.id ?: UUID.randomUUID().toString(), title.trim(), target,
+                        selected.toSet(), mode, if (growth) baseline else 0, date, existing?.colorIndex ?: 0))
+                }
+            }, enabled = accounts.isNotEmpty(), modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.textButtonColorsPrimary())
         }
     }
 }
@@ -1821,17 +1846,20 @@ private fun formatBannerPercent(progress: Float, decimals: Int): String {
             colors = dialogFieldColors(balanceError.isNotEmpty()))
         FieldError(balanceError)
         Note(tr("account.cny_only_note"))
-        Button(onClick = {
-            val cents = Money.parse(balance)
-            nameError = if (name.isBlank()) tr("account.error_name_required") else ""
-            balanceError = if (cents == null) tr("account.error_invalid_balance") else ""
-            if (nameError.isEmpty() && balanceError.isEmpty() && cents != null) {
-                val balanceChanged = existing == null || cents != existing.balance
-                onSave(BankAccount(existing?.id ?: UUID.randomUUID().toString(), name.trim(), cents,
-                    if (balanceChanged) System.currentTimeMillis() else existing.updatedAt,
-                    if (balanceChanged) "account.source_manual" else existing.source))
-            }
-        }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColorsPrimary()) { Text(tr("account.save")) }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            TextButton(text = tr("common.cancel"), onClick = onDismiss, modifier = Modifier.weight(1f))
+            TextButton(text = tr("account.save"), onClick = {
+                val cents = Money.parse(balance)
+                nameError = if (name.isBlank()) tr("account.error_name_required") else ""
+                balanceError = if (cents == null) tr("account.error_invalid_balance") else ""
+                if (nameError.isEmpty() && balanceError.isEmpty() && cents != null) {
+                    val balanceChanged = existing == null || cents != existing.balance
+                    onSave(BankAccount(existing?.id ?: UUID.randomUUID().toString(), name.trim(), cents,
+                        if (balanceChanged) System.currentTimeMillis() else existing.updatedAt,
+                        if (balanceChanged) "account.source_manual" else existing.source))
+                }
+            }, modifier = Modifier.weight(1f), colors = ButtonDefaults.textButtonColorsPrimary())
+        }
     }
 }
 
@@ -1861,7 +1889,7 @@ private fun formatBannerPercent(progress: Float, decimals: Int): String {
 )
 
 @Composable private fun FieldError(text: String) {
-    if (text.isNotEmpty()) Text(text, color = MiuixTheme.colorScheme.error, fontSize = 12.sp)
+    if (text.isNotEmpty()) Text(text, style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.error)
 }
 
 /**
@@ -1882,21 +1910,15 @@ private fun formatBannerPercent(progress: Float, decimals: Int): String {
     onDismissFinished: () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    WindowBottomSheet(
+    WindowDialog(
         show = show,
         title = title,
-        startAction = {
-            IconButton(onClick = onDismiss) {
-                Icon(MiuixIcons.Close, contentDescription = tr("common.cancel"),
-                    tint = MiuixTheme.colorScheme.onBackground)
-            }
-        },
         onDismissRequest = onDismiss,
         onDismissFinished = onDismissFinished,
-        insideMargin = DpSize(24.dp, 24.dp),
     ) {
-        Column(Modifier.fillMaxWidth().heightIn(max = 560.dp).verticalScroll(rememberScrollState())
-            .padding(bottom = 16.dp),
+        // Dialogs are bottom-attached on phones, so keep long forms scrollable instead of letting
+        // them grow past the IME. WindowDialog supplies the 24dp inside margin itself.
+        Column(Modifier.fillMaxWidth().heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             content()
         }
@@ -2073,7 +2095,7 @@ private class SortDragState {
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 style = MiuixTheme.textStyles.body1)
             Spacer(Modifier.width(8.dp))
-            Text("¥ $amount", modifier = Modifier.widthIn(max = 132.dp), fontSize = 13.sp, maxLines = 1,
+            Text("¥ $amount", modifier = Modifier.widthIn(max = 132.dp), style = MiuixTheme.textStyles.footnote1, maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
             Box(Modifier.size(48.dp).onGloballyPositioned { handleCoordinates = it }
@@ -2139,31 +2161,33 @@ private class SortDragState {
 @Composable private fun Panel(content: @Composable ColumnScope.() -> Unit) {
     Card(Modifier.fillMaxWidth().animateContentSize(),
         insideMargin = PaddingValues(16.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(11.dp), content = content)
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
     }
 }
 @Composable private fun Note(text: String) {
-    Text(text, fontSize = 12.sp, lineHeight = 20.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+    Text(text, style = MiuixTheme.textStyles.body2, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
 }
-@Composable private fun Badge(text: String, color: Color) {
-    Box(Modifier.squircleSurface(color = color.copy(alpha = .12f), cornerRadius = 8.dp)
+/** Small status pill. Miuix has no chip component, so keep it on the theme container tokens. */
+@Composable private fun StatusPill(text: String) {
+    Box(Modifier.squircleSurface(color = MiuixTheme.colorScheme.primaryContainer, cornerRadius = 8.dp)
         .padding(horizontal = 9.dp, vertical = 5.dp)) {
-        Text(text, fontSize = 10.sp, color = color, fontWeight = FontWeight.Medium)
+        Text(text, style = MiuixTheme.textStyles.footnote2,
+            color = MiuixTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Medium)
     }
 }
-@Composable private fun IconTile(kind: String, color: Color) {
-    Box(Modifier.size(44.dp).squircleSurface(color = color.copy(alpha = .1f), cornerRadius = 15.dp),
+@Composable private fun IconTile(kind: String) {
+    Box(Modifier.size(44.dp).squircleSurface(color = MiuixTheme.colorScheme.primaryContainer, cornerRadius = 15.dp),
         contentAlignment = Alignment.Center) {
-        Symbol(kind, color, Modifier.size(24.dp))
+        Symbol(kind, MiuixTheme.colorScheme.onPrimaryContainer, Modifier.size(24.dp))
     }
 }
 @Composable private fun EmptyCard(kind: String, title: String, body: String, action: String, onClick: () -> Unit) {
     Panel {
         Column(Modifier.fillMaxWidth().padding(vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            IconTile(kind, MiuixTheme.colorScheme.primary)
+            IconTile(kind)
             Text(title, style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold)
-            Text(body, style = MiuixTheme.textStyles.footnote1, lineHeight = 22.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            Text(body, style = MiuixTheme.textStyles.body2, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
             Button(onClick = onClick, colors = ButtonDefaults.buttonColorsPrimary()) { Text(action) }
         }
@@ -2171,9 +2195,9 @@ private class SortDragState {
 }
 @Composable private fun HelpStep(number: String, title: String, body: String) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Badge(number, MiuixTheme.colorScheme.primary)
+        StatusPill(number)
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(title, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Text(title, style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.Medium)
             Note(body)
         }
     }

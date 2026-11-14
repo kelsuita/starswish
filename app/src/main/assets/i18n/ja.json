@@ -243,6 +243,8 @@
   "theme.mode": "テーマモード",
   "theme.monet": "Monetカラー",
   "theme.monet_summary": "MIUIXパレットを生成するトーンアルゴリズム",
+  "theme.nav_style_ios": "iOS スタイル",
+  "theme.nav_style_miuix": "Miuix スタイル",
   "theme.needs_android13": "Android 13以降が必要です",
   "theme.palette_default": "デフォルト",
   "theme.palette_style": "パレットスタイル",

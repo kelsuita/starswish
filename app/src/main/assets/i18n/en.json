@@ -243,6 +243,8 @@
   "theme.mode": "Theme mode",
   "theme.monet": "Monet colors",
   "theme.monet_summary": "Tone algorithm used to derive the MIUIX palette",
+  "theme.nav_style_ios": "iOS-like",
+  "theme.nav_style_miuix": "Miuix",
   "theme.needs_android13": "Requires Android 13 or later",
   "theme.palette_default": "Default",
   "theme.palette_style": "Palette style",
