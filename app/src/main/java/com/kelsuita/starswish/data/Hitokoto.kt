@@ -16,7 +16,17 @@ suspend fun fetchHitokoto(): String? = withContext(Dispatchers.IO) {
             requestMethod = "GET"
         }
         if (connection.responseCode != HttpURLConnection.HTTP_OK) return@withContext null
-        val body = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText().take(8192) }
+        // Read at most 8 KiB so a misbehaving endpoint cannot make us buffer a huge body.
+        val body = connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
+            val builder = StringBuilder(1024)
+            val buffer = CharArray(2048)
+            while (builder.length < 8192) {
+                val count = reader.read(buffer)
+                if (count < 0) break
+                builder.append(buffer, 0, minOf(count, 8192 - builder.length))
+            }
+            builder.toString()
+        }
         JSONObject(body).optString("hitokoto").trim().takeIf { it.isNotEmpty() }
     } catch (_: Exception) {
         null

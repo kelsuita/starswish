@@ -15,7 +15,7 @@ data class BackupData(
     val goals: List<SavingGoal>,
     val appearance: Appearance,
     val hitokoto: String? = null,
-    /** Stored language choice (0 follows system, 1 Simplified Chinese, 2 Traditional Chinese, 3 English). */
+    /** Stored language choice; an index into [AppLanguage.entries]. */
     val language: Int = 0,
     /** Null means no manual quote choice; the language default then applies. */
     val quoteEnabled: Boolean? = null,

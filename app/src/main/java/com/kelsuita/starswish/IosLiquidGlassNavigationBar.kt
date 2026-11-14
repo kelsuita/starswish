@@ -137,16 +137,16 @@ private val iosIndicatorSpecular: Highlight = Highlight(
     ),
 )
 
-// Mirrors HighlightStyle.kt's LIGHT_REF 鈥?keep in sync.
+// Mirrors HighlightStyle.kt's LIGHT_REF - keep in sync.
 private const val LIGHT_REF_X = 0.5f
 private const val LIGHT_REF_Y = 0.7f
-private const val GRAVITY_DIR_THRESHOLD_SQ = 0.01f // |g_xy| > 0.1, 鈮?6掳 tilt
+private const val GRAVITY_DIR_THRESHOLD_SQ = 0.01f // |g_xy| > 0.1, ~6° tilt
 
-// 3掳 quantization step for the gravity direction: finer changes are imperceptible.
+// 3° quantization step for the gravity direction: finer changes are imperceptible.
 private const val GRAVITY_ANGLE_STEP_RAD = (3.0 * PI / 180.0).toFloat()
 
 /**
- * In-screen-plane gravity direction angle (radians, quantized to 3掳 steps).
+ * In-screen-plane gravity direction angle (radians, quantized to 3° steps).
  *
  * Returned as [State] so the read can be deferred to the draw phase: the sensor writes tilt
  * state unthrottled (~50Hz), and a composition-time read would recompose the whole caller

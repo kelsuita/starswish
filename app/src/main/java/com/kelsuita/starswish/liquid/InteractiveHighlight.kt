@@ -3,7 +3,7 @@
 
 package com.kelsuita.starswish.liquid
 
-// Adapted from Kyant0/AndroidLiquidGlass 鈥?https://github.com/Kyant0/AndroidLiquidGlass (Apache 2.0).
+// Adapted from Kyant0/AndroidLiquidGlass - https://github.com/Kyant0/AndroidLiquidGlass (Apache 2.0).
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.VectorConverter
@@ -36,7 +36,7 @@ internal class InteractiveHighlight(
     private var startPosition = Offset.Zero
 
     // Smoothstep press spot; without runtime shader support, falls back to a radialGradient
-    // approximation (linear instead of S-curve falloff 鈥?barely distinguishable).
+    // approximation (linear instead of S-curve falloff - barely distinguishable).
     private val spotShader: RuntimeShader? =
         if (isRuntimeShaderSupported()) RuntimeShader(SPOT_SHADER) else null
 

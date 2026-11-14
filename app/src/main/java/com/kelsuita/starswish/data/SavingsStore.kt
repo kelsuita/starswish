@@ -4,17 +4,17 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** One private preference file. Every mutation is committed atomically before success is reported. */
+/** One private preference file. Writes update memory immediately and flush to disk asynchronously. */
 class SavingsStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("savings_v1", Context.MODE_PRIVATE)
 
     fun developerModeEnabled(): Boolean = prefs.getBoolean("developer_mode", false)
     fun setDeveloperMode(enabled: Boolean) {
-        check(prefs.edit().putBoolean("developer_mode", enabled).commit()) { tr("common.save_failed") }
+        prefs.edit().putBoolean("developer_mode", enabled).apply()
     }
     fun webDavBalanceEnabled(): Boolean = prefs.getBoolean("webdav_balance_enabled", false)
     fun setWebDavBalanceEnabled(enabled: Boolean) {
-        check(prefs.edit().putBoolean("webdav_balance_enabled", enabled).commit()) { tr("common.save_failed") }
+        prefs.edit().putBoolean("webdav_balance_enabled", enabled).apply()
     }
     fun webDavUrl(): String = prefs.getString("webdav_url", "").orEmpty()
     fun webDavAccount(): String = prefs.getString("webdav_account", "").orEmpty()
@@ -23,16 +23,22 @@ class SavingsStore(context: Context) {
     fun webDavConnected(): Boolean = prefs.getBoolean("webdav_connected", false) &&
         webDavAccount().isNotBlank() && encryptedWebDavPassword().isNotBlank()
     fun markWebDavConnected() {
-        check(prefs.edit().putBoolean("webdav_connected", true).commit()) { tr("common.save_failed") }
+        prefs.edit().putBoolean("webdav_connected", true).apply()
     }
-    fun saveWebDavSettings(url: String, account: String, encryptedPassword: String) {
-        val changed = url.trim() != webDavUrl() || account.trim() != webDavAccount() ||
-            encryptedPassword != encryptedWebDavPassword()
+    fun markWebDavDisconnected() {
+        prefs.edit().putBoolean("webdav_connected", false).apply()
+    }
+    /**
+     * Saves credentials. [credentialsChanged] is decided by the caller because the stored
+     * password is encrypted with a random IV, so comparing ciphertext would always report a
+     * change even when the plaintext is identical.
+     */
+    fun saveWebDavSettings(url: String, account: String, encryptedPassword: String, credentialsChanged: Boolean) {
         val editor = prefs.edit().putString("webdav_url", url.trim())
             .putString("webdav_account", account.trim())
             .putString("webdav_password", encryptedPassword)
-        if (changed) editor.putBoolean("webdav_connected", false)
-        check(editor.commit()) { tr("common.save_failed") }
+        if (credentialsChanged) editor.putBoolean("webdav_connected", false)
+        editor.apply()
     }
 
     fun hitokoto(): String? = prefs.getString("hitokoto", null)
@@ -46,7 +52,7 @@ class SavingsStore(context: Context) {
     fun quoteEnabled(): Boolean? =
         if (prefs.contains("quote_enabled")) prefs.getBoolean("quote_enabled", true) else null
     fun saveQuoteEnabled(value: Boolean) {
-        check(prefs.edit().putBoolean("quote_enabled", value).commit()) { tr("common.save_failed") }
+        prefs.edit().putBoolean("quote_enabled", value).apply()
     }
 
     /** UI language index: an index into [AppLanguage.entries]. */
@@ -59,7 +65,7 @@ class SavingsStore(context: Context) {
     }
     fun saveLanguage(value: Int) {
         require(value in AppLanguage.entries.indices)
-        check(prefs.edit().putInt("language_v2", value).commit()) { tr("settings.language_save_failed") }
+        prefs.edit().putInt("language_v2", value).apply()
     }
 
     fun appearance(): Appearance = Appearance(
@@ -82,7 +88,7 @@ class SavingsStore(context: Context) {
         require(value.themeMode in 0..2 && value.accentIndex in 0..5 && value.bannerStyle in 0..1 &&
             value.paletteStyle in 0..8 && value.colorSpec in 0..1 && value.floatingNavBarStyle in 0..1 &&
             value.bannerDecimals in 0..5)
-        check(prefs.edit().putInt("theme_mode", value.themeMode)
+        prefs.edit().putInt("theme_mode", value.themeMode)
             .putInt("accent_choice", value.accentIndex)
             .putInt("banner_style", value.bannerStyle)
             .putString("featured_goal", value.featuredGoalId)
@@ -94,7 +100,7 @@ class SavingsStore(context: Context) {
             .putBoolean("floating_nav_bar", value.floatingNavBar)
             .putInt("floating_nav_bar_style", value.floatingNavBarStyle)
             .putBoolean("predictive_back_enabled", value.predictiveBackEnabled)
-            .putInt("banner_decimals", value.bannerDecimals).commit()) { tr("settings.appearance_save_failed") }
+            .putInt("banner_decimals", value.bannerDecimals).apply()
     }
 
     @Synchronized fun exportBackup(): BackupData {
@@ -129,6 +135,9 @@ class SavingsStore(context: Context) {
             .putInt("banner_decimals", value.bannerDecimals)
             .putInt("language_v2", backup.language)
             .remove("capture").remove("candidate")
+            // Credentials belong to this device, not to the imported backup.
+            .remove("webdav_url").remove("webdav_account").remove("webdav_password")
+            .remove("webdav_connected")
         if (backup.quoteEnabled == null) editor.remove("quote_enabled")
         else editor.putBoolean("quote_enabled", backup.quoteEnabled)
         if (backup.hitokoto == null) editor.remove("hitokoto") else editor.putString("hitokoto", backup.hitokoto)
@@ -174,7 +183,7 @@ class SavingsStore(context: Context) {
         require(balances.values.all { it in -Money.MAX_CENTS..Money.MAX_CENTS })
         val updated = existing.map { account ->
             balances[account.id]?.let { cents ->
-                account.copy(balance = cents, updatedAt = updatedAt, source = "account.source_xiaoxing")
+                account.copy(balance = cents, updatedAt = updatedAt, source = "account.source_webdav")
             } ?: account
         }
         writeAccounts(updated)
@@ -210,7 +219,7 @@ class SavingsStore(context: Context) {
         // A dangling featured id would leave the home banner falling back to the first goal,
         // while settings still highlighted a missing entry.
         if (prefs.getString("featured_goal", "") == id) editor.putString("featured_goal", "")
-        check(editor.commit()) { tr("common.save_failed_space") }
+        editor.apply()
     }
     @Synchronized fun deleteAccount(id: String) {
         require(goals().none { id in it.accountIds }) { tr("account.error_unlink_first") }
@@ -225,33 +234,34 @@ class SavingsStore(context: Context) {
     }.getOrNull()
     fun startCapture(id: String) {
         require(accounts().any { it.id == id })
-        check(prefs.edit().remove("candidate").putString("capture", JSONObject()
-            .put("accountId", id).put("expiresAt", System.currentTimeMillis() + 120_000).toString()).commit())
+        prefs.edit().remove("candidate").putString("capture", JSONObject()
+            .put("accountId", id).put("expiresAt", System.currentTimeMillis() + 120_000).toString()).apply()
     }
-    fun cancelCapture() { check(prefs.edit().remove("capture").commit()) }
+    fun cancelCapture() { prefs.edit().remove("capture").apply() }
     fun candidate(): BalanceCandidate? = runCatching {
         prefs.getString("candidate", null)?.let {
             JSONObject(it).let { o -> BalanceCandidate(o.getString("accountId"), o.getLong("balance"), o.getLong("capturedAt")) }
         }
     }.getOrNull()
     fun stage(candidate: BalanceCandidate) {
-        check(prefs.edit().putString("candidate", JSONObject().put("accountId", candidate.accountId)
+        prefs.edit().putString("candidate", JSONObject().put("accountId", candidate.accountId)
             .put("balance", candidate.balance).put("capturedAt", candidate.capturedAt).toString())
-            .remove("capture").commit())
+            .remove("capture").apply()
     }
-    fun clearCandidate() { check(prefs.edit().remove("candidate").commit()) }
+    fun clearCandidate() { prefs.edit().remove("candidate").apply() }
     @Synchronized fun acceptCandidate() {
         val candidate = candidate() ?: return
+        require(candidate.balance in -Money.MAX_CENTS..Money.MAX_CENTS)
         val account = accounts().firstOrNull { it.id == candidate.accountId } ?: error(tr("account.error_deleted"))
         val updated = accounts().map {
             if (it.id == account.id) it.copy(balance = candidate.balance, updatedAt = candidate.capturedAt,
                 source = "account.source_xiaoxing") else it
         }
-        check(prefs.edit().putString("accounts", accountsJson(updated).toString()).remove("candidate").commit())
+        prefs.edit().putString("accounts", accountsJson(updated).toString()).remove("candidate").apply()
     }
     private fun readArray(key: String): JSONArray = runCatching { JSONArray(prefs.getString(key, "[]")) }
         .getOrElse { JSONArray() }
-    private fun put(key: String, value: String) { check(prefs.edit().putString(key, value).commit()) { tr("common.save_failed_space") } }
+    private fun put(key: String, value: String) { prefs.edit().putString(key, value).apply() }
     private fun writeAccounts(accounts: List<BankAccount>) = put("accounts", accountsJson(accounts).toString())
     private fun accountsJson(accounts: List<BankAccount>) = JSONArray().apply {
         accounts.forEach { put(JSONObject().put("id", it.id).put("name", it.name)

@@ -300,7 +300,9 @@ private fun SavingsApp(
         initialValue = if (expandedNavigation) NavigationRailValue.Expanded else NavigationRailValue.Collapsed,
     )
     val goalGrid = configuration.screenWidthDp >= 840
-    val accountGrid = goalGrid
+    // Landscape phones stay below the tablet breakpoint but are still wide enough for two
+    // account columns, so the account grid also opens up when the window is short and wide.
+    val accountGrid = goalGrid || (landscape && configuration.screenWidthDp >= 640)
     val layoutDirection = LocalLayoutDirection.current
     val versionName = remember { context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty() }
     var hitokoto by remember { mutableStateOf(store.hitokoto()) }
@@ -356,7 +358,11 @@ private fun SavingsApp(
     var webDavBusy by remember { mutableStateOf(false) }
     var webDavUrl by rememberSaveable { mutableStateOf("") }
     var webDavAccount by rememberSaveable { mutableStateOf("") }
-    var webDavPassword by remember { mutableStateOf("") }
+    var webDavPassword by rememberSaveable { mutableStateOf("") }
+    // True once the user edits the password field. Used to keep the stored "connected" flag
+    // only when the credentials really changed, and to avoid overwriting typing during a
+    // background decrypt.
+    var webDavPasswordEdited by remember { mutableStateOf(false) }
     var webDavAccountId by rememberSaveable { mutableStateOf<String?>(null) }
     var webDavChanges by remember { mutableStateOf<List<WebDavBalanceChange>>(emptyList()) }
     var webDavChangesVisible by remember { mutableStateOf(false) }
@@ -508,31 +514,46 @@ private fun SavingsApp(
         webDavAccountId = accountId
         webDavUrl = store.webDavUrl()
         webDavAccount = store.webDavAccount()
-        webDavPassword = runCatching { WebDavSettings.decryptPassword(store.encryptedWebDavPassword()) }
-            .getOrElse { notify(it.message ?: tr("common.operation_failed")); "" }
+        webDavPasswordEdited = false
+        webDavPassword = ""
         webDavSheet = true
+        // Decrypting touches the keystore, so keep it off the UI thread. The sheet opens with an
+        // empty password and fills in as soon as the stored secret is available.
+        scope.launch {
+            val stored = withContext(Dispatchers.IO) {
+                runCatching { WebDavSettings.decryptPassword(store.encryptedWebDavPassword()) }
+            }
+            stored.exceptionOrNull()?.let { notify(it.message ?: tr("common.operation_failed")) }
+            if (!webDavPasswordEdited) webDavPassword = stored.getOrDefault("")
+        }
     }
     fun readWebDav(accountId: String? = null) {
         if (webDavBusy || webDavChangesVisible || !store.developerModeEnabled() || !store.webDavBalanceEnabled()) return
         val saveCredentials = webDavSheet
         val requestedAccountId = if (saveCredentials) webDavAccountId else accountId
+        // Only a real credential edit should invalidate the stored "connected" state.
+        val credentialsEdited = saveCredentials && (webDavPasswordEdited ||
+            webDavUrl.trim() != store.webDavUrl() || webDavAccount.trim() != store.webDavAccount())
         webDavBusy = true
         scope.launch {
             val temp = File(context.cacheDir, "webdav-${UUID.randomUUID()}").apply { mkdirs() }
+            var client: WebDavClient? = null
             try {
                 val url = if (saveCredentials) webDavUrl else store.webDavUrl()
                 val username = if (saveCredentials) webDavAccount else store.webDavAccount()
-                val password = if (saveCredentials) webDavPassword else WebDavSettings.decryptPassword(store.encryptedWebDavPassword())
+                val password = if (saveCredentials) webDavPassword
+                    else withContext(Dispatchers.IO) { WebDavSettings.decryptPassword(store.encryptedWebDavPassword()) }
                 if (username.isBlank() || password.isBlank()) throw SyncError("webdav.error_credentials")
-                val client = WebDavClient(url, username, password)
-                val backup = client.latestBackup()
+                val webdav = WebDavClient(url, username, password)
+                client = webdav
+                val backup = webdav.latestBackup()
                 val archive = File(temp, "backup.lch")
                 val database = File(temp, "snapshot.mdb")
-                withContext(Dispatchers.IO) { client.download(backup, archive) }
+                withContext(Dispatchers.IO) { webdav.download(backup, archive) }
                 withContext(Dispatchers.IO) { XiaoxingBackupDecryptor.decrypt(archive, database) }
                 val balances = SnapshotBalanceReader.read(database)
                 if (saveCredentials) withContext(Dispatchers.IO) {
-                    store.saveWebDavSettings(url, username, WebDavSettings.encryptPassword(password))
+                    store.saveWebDavSettings(url, username, WebDavSettings.encryptPassword(password), credentialsEdited)
                 }
                 val current = store.accounts().let { accounts ->
                     if (requestedAccountId == null) accounts else accounts.filter { it.id == requestedAccountId }
@@ -568,10 +589,16 @@ private fun SavingsApp(
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 Log.w("StarwishWebDav", "WebDAV balance import failed", error)
+                if (error is SyncError && error.key == "webdav.error_auth") {
+                    // Rejected credentials must not keep showing as a working connection.
+                    runCatching { store.markWebDavDisconnected() }
+                    refresh()
+                }
                 val message = if (error is SyncError) error.arg?.let { tr(error.key, it) } ?: tr(error.key)
                     else tr("webdav.error_read")
                 notify(message)
             } finally {
+                client?.close()
                 temp.deleteRecursively()
                 webDavBusy = false
             }
@@ -893,7 +920,6 @@ private fun SavingsApp(
             .overScrollVertical()
             .nestedScroll(contentScrollBehavior.nestedScrollConnection)
             .verticalScroll(pageScrollState)
-            .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
             .padding(start = if (wideLayout) 32.dp else maxOf(16.dp, pagePadding.calculateStartPadding(layoutDirection)),
                 end = maxOf(if (wideLayout) 32.dp else 16.dp, pagePadding.calculateEndPadding(layoutDirection)),
                 top = pagePadding.calculateTopPadding(),
@@ -920,7 +946,8 @@ private fun SavingsApp(
                         GoalCard(goal, accounts,
                             onEdit = { editingGoalId = goal.id; goalEditor = true },
                             onDelete = { deletingGoal = goal; deletingGoalVisible = true },
-                            onSync = { navigate(1) }, compact = appearance.compactList)
+                            onSync = { navigate(1) }, compact = appearance.compactList,
+                            decimals = appearance.bannerDecimals)
                     }
                     if (goalGrid) {
                         // Wider windows use two card columns; the sort page remains a single
@@ -1397,7 +1424,7 @@ private fun SavingsApp(
                             colors = sheetFieldColors())
                         TextField(value = webDavAccount, onValueChange = { webDavAccount = it }, label = tr("webdav.account"),
                             colors = sheetFieldColors())
-                        TextField(value = webDavPassword, onValueChange = { webDavPassword = it }, label = tr("webdav.password"),
+                        TextField(value = webDavPassword, onValueChange = { webDavPassword = it; webDavPasswordEdited = true }, label = tr("webdav.password"),
                             visualTransformation = PasswordVisualTransformation(), singleLine = true,
                             colors = sheetFieldColors())
                     }
@@ -1607,7 +1634,7 @@ private fun formatBannerPercent(progress: Float, decimals: Int): String {
     }
 }
 
-@Composable private fun GoalCard(goal: SavingGoal, accounts: List<BankAccount>, onEdit: () -> Unit, onDelete: () -> Unit, onSync: () -> Unit, compact: Boolean) {
+@Composable private fun GoalCard(goal: SavingGoal, accounts: List<BankAccount>, onEdit: () -> Unit, onDelete: () -> Unit, onSync: () -> Unit, compact: Boolean, decimals: Int) {
     val color = MiuixTheme.colorScheme.primary
     val progress by animateFloatAsState(goal.progress(accounts), tween(650), label = "goal-progress")
     val saved = goal.saved(accounts)
@@ -1628,7 +1655,7 @@ private fun formatBannerPercent(progress: Float, decimals: Int): String {
                 Text(tr("goal.target_amount_line", Money.format(goal.target)), style = MiuixTheme.textStyles.footnote1,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
             }
-            Text("${(goal.progress(accounts) * 100).toInt()}%", style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold, color = color)
+            Text(formatBannerPercent(goal.progress(accounts), decimals), style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.Bold, color = color)
         }
         LinearProgressIndicator(progress = progress, height = 8.dp,
             modifier = Modifier.semantics { contentDescription = tr("home.progress_percent", goal.title) },

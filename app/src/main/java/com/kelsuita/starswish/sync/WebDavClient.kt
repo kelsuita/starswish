@@ -65,8 +65,19 @@ internal class WebDavClient(
         return (0 until nodes.length).mapNotNull { index ->
             val element = nodes.item(index) as? org.w3c.dom.Element ?: return@mapNotNull null
             val href = element.child("href")?.textContent?.trim() ?: return@mapNotNull null
-            val prop = element.getElementsByTagNameNS(DAV_NS, "prop").item(0) as? org.w3c.dom.Element
-                ?: return@mapNotNull null
+            // A response may carry several propstat blocks; only a successful one describes the
+            // resource. Reading the first block blindly could pick up a 404 stub with no metadata.
+            val propstatNodes = element.getElementsByTagNameNS(DAV_NS, "propstat")
+            val propstats = (0 until propstatNodes.length)
+                .mapNotNull { propstatNodes.item(it) as? org.w3c.dom.Element }
+            val prop: org.w3c.dom.Element = if (propstats.isEmpty()) {
+                // Some servers omit propstat and put prop directly under response.
+                (element.child("prop") as? org.w3c.dom.Element) ?: return@mapNotNull null
+            } else {
+                val ok = propstats.firstOrNull { isSuccessStatus(it.child("status")?.textContent) }
+                    ?: return@mapNotNull null
+                (ok.child("prop") as? org.w3c.dom.Element) ?: return@mapNotNull null
+            }
             val isCollection = prop.getElementsByTagNameNS(DAV_NS, "resourcetype").item(0)
                 ?.let { (it as? org.w3c.dom.Element)?.getElementsByTagNameNS(DAV_NS, "collection")?.length }
                 ?: 0
@@ -84,7 +95,9 @@ internal class WebDavClient(
     }
 
     suspend fun download(backup: WebDavBackup, output: File) = withContext(Dispatchers.IO) {
-        if (backup.length !in 1..MAX_BACKUP_BYTES) throw SyncError("webdav.error_download")
+        // The size may be unknown (0) on servers that omit getcontentlength; the streaming
+        // limit below still bounds the download.
+        if (backup.length > MAX_BACKUP_BYTES) throw SyncError("webdav.error_download")
         val base = URL(normalizeRoot(root))
         val url = base.toURI().resolve(URI(backup.href)).toURL()
         if (url.protocol != base.protocol || !url.host.equals(base.host, true) || url.port != base.port) {
@@ -105,7 +118,7 @@ internal class WebDavClient(
                         if (total > MAX_BACKUP_BYTES) throw SyncError("webdav.error_download")
                         out.write(buffer, 0, count)
                     }
-                    if (total != backup.length) throw SyncError("webdav.error_download")
+                    if (backup.length > 0 && total != backup.length) throw SyncError("webdav.error_download")
                 }
             }
         }
@@ -142,6 +155,11 @@ internal class WebDavClient(
         ?.substringBefore('>')
         ?.takeIf { it.isNotBlank() }
 
+    /** `status` looks like `HTTP/1.1 200 OK`; accept only a 2xx code. */
+    private fun isSuccessStatus(status: String?): Boolean = status
+        ?.let { Regex("\\s(\\d{3})\\s").find(it)?.groupValues?.get(1)?.toIntOrNull() }
+        ?.let { it in 200..299 } ?: false
+
     private fun authorization() = "Basic " + Base64.getEncoder()
         .encodeToString("$username:$password".toByteArray(Charsets.UTF_8))
 
@@ -177,9 +195,17 @@ internal class WebDavClient(
     private fun normalizeRoot(value: String): String {
         val trimmed = value.trim().ifEmpty { WebDavSettings.DEFAULT_URL }
         val parsed = Uri.parse(trimmed)
-        if (parsed.scheme != "https" && parsed.scheme != "http") throw SyncError("webdav.error_url")
+        // The app does not allow cleartext traffic, so an http:// endpoint would always fail
+        // with an opaque platform error. Reject it up front with an actionable message.
+        if (parsed.scheme != "https") throw SyncError("webdav.error_https")
         if (parsed.host == null || parsed.userInfo != null) throw SyncError("webdav.error_url")
         return if (trimmed.endsWith('/')) trimmed else "$trimmed/"
+    }
+
+    /** Releases the per-request connection pool and dispatcher threads. */
+    fun close() {
+        runCatching { http.connectionPool.evictAll() }
+        runCatching { http.dispatcher.executorService.shutdown() }
     }
 
     companion object {
@@ -195,7 +221,9 @@ internal class WebDavClient(
 
 internal object XiaoxingBackupDecryptor {
     private const val PASSWORD = "EuIDl^FFs29x1sw@"
-    private const val MAX_DATABASE_BYTES = 256L * 1024 * 1024
+    // The whole database is loaded into memory by the LMDB reader, so keep this well below
+    // typical phone heap limits. Real Xiaoxing backups are a few megabytes.
+    private const val MAX_DATABASE_BYTES = 64L * 1024 * 1024
 
     fun decrypt(archive: File, destination: File): File {
         val zip = ZipFile(archive, PASSWORD.toCharArray())

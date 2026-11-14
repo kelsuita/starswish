@@ -162,7 +162,7 @@ internal object SnapshotBalanceReader {
     }
 
     private object Constants {
-        const val MAX_DATABASE_BYTES = 256L * 1024 * 1024
+        const val MAX_DATABASE_BYTES = 64L * 1024 * 1024
         const val MAX_FIELD_BYTES = 16 * 1024 * 1024
         fun u16(b: ByteArray, p: Int) = (b[p].toInt() and 255) or ((b[p + 1].toInt() and 255) shl 8)
         fun u32(b: ByteArray, p: Int) = (u16(b, p).toLong() or (u16(b, p + 2).toLong() shl 16))
