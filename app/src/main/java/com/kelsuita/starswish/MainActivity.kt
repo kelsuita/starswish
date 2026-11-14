@@ -741,10 +741,15 @@ private fun SavingsApp(
           },
       ) { route ->
         val page = if (route.page >= 3) route.page else selectedTab
-        // Wide layouts keep the content in a centred 880dp column. Give the bar title the same
-        // gutter so the large title starts on the column instead of floating at the rail edge.
-        val barTitlePadding = if (wideLayout)
-            ((paneWidth - 880.dp) * 0.5f).coerceAtLeast(0.dp) + 32.dp
+        // Wide layouts keep the content in a centred 880dp column. TopAppBar already applies the
+        // display-cutout inset to itself, so the title gutter only needs the centring offset plus
+        // whatever the column adds on top of that cutout. Subtracting the cutout keeps the large
+        // title on the same edge as the cards instead of 30dp to their right.
+        val cutoutInsets = WindowInsets.displayCutout.asPaddingValues()
+        val cutoutStart = cutoutInsets.calculateStartPadding(layoutDirection)
+        val cutoutEnd = cutoutInsets.calculateEndPadding(layoutDirection)
+        val columnStart = ((paneWidth - 880.dp) * 0.5f).coerceAtLeast(0.dp) + maxOf(32.dp, cutoutStart)
+        val barTitlePadding = if (wideLayout) (columnStart - cutoutStart).coerceAtLeast(0.dp)
         else TopAppBarDefaults.TitlePadding
         val blurActive = appearance.blurEnabled && android.os.Build.VERSION.SDK_INT >= 33 && isRuntimeShaderSupported()
         // A LayerBackdrop has one recording owner. Pager neighbours must not overwrite it.
@@ -845,7 +850,7 @@ private fun SavingsApp(
                                             (1f - contentScrollBehavior.state.collapsedFraction).coerceIn(0f, 1f)).toInt()
                                         layout(placeable.width, visibleHeight) { placeable.placeRelative(0, 0) }
                                     }.clipToBounds()) {
-                                        val side = if (wideLayout) 32.dp else TopAppBarDefaults.TitlePadding
+                                        val side = if (wideLayout) barTitlePadding else TopAppBarDefaults.TitlePadding
                                         val caption = if (displayedPage == 2 && quoteShown) {
                                             if (quoteLoading) tr("settings.quote_loading") else hitokoto ?: tr("settings.quote_loading")
                                         } else null
@@ -917,11 +922,8 @@ private fun SavingsApp(
         // base margin, the scaffold inset and the cutout: the cutout is then applied exactly once
         // and the content never slides under the camera.
         val baseSide = if (wideLayout) 32.dp else 16.dp
-        val cutoutPadding = WindowInsets.displayCutout.asPaddingValues()
-        val sideStart = maxOf(baseSide, pagePadding.calculateStartPadding(layoutDirection),
-            cutoutPadding.calculateStartPadding(layoutDirection))
-        val sideEnd = maxOf(baseSide, pagePadding.calculateEndPadding(layoutDirection),
-            cutoutPadding.calculateEndPadding(layoutDirection))
+        val sideStart = maxOf(baseSide, pagePadding.calculateStartPadding(layoutDirection), cutoutStart)
+        val sideEnd = maxOf(baseSide, pagePadding.calculateEndPadding(layoutDirection), cutoutEnd)
         Column(Modifier.fillMaxHeight()
             .then(if (wideLayout) Modifier.widthIn(max = 880.dp) else Modifier)
             .fillMaxWidth()
