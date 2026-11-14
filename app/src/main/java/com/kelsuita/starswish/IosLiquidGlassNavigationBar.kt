@@ -115,7 +115,7 @@ import kotlin.math.sin
 private val LocalIosTabScale = staticCompositionLocalOf { { 1f } }
 
 /** Bar blur radius in pixels. */
-private const val BAR_BLUR_RADIUS_PX = 94f
+private const val BAR_BLUR_RADIUS_PX = 25f
 
 private val iosIndicatorSpecular: Highlight = Highlight(
     width = 1.dp,
